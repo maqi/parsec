@@ -230,32 +230,27 @@ mod detail {
         initial_events: &[Hash],
     ) -> io::Result<()> {
         for (event_hash, event) in gossip_graph.iter() {
-            // Write the `valid_blocks_carried` if have
-            if !event.valid_blocks_carried.is_empty() {
-                writeln!(
-                    writer,
-                    " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson, label=\"{}_{}",
-                    event_hash,
-                    first_char(event.creator()).unwrap_or('Z'),
-                    event.index.unwrap_or(0)
-                )?;
-                if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
-                    write!(writer, "\n{:?}", event_payload)?;
-                }
-                writeln!(writer, "{:?}\"]", event.valid_blocks_carried)?;
+            write!(writer, " \"{:?}\" [", event.hash())?;
+            if meta_votes.contains_key(event_hash) {
+                write!(writer, " shape=rectangle, ")?;
             }
-
-            // Write the `meta_votes` if have
-            write!(writer, " \"{:?}\" ", event.hash())?;
-            write!(
+            writeln!(
                 writer,
-                " [fillcolor=white, label=\"{}_{}",
+                "fillcolor=white, label=\"{}_{}",
                 first_char(event.creator()).unwrap_or('E'),
                 event.index.unwrap_or(0)
             )?;
+
             if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
-                write!(writer, "\n{:?}", event_payload)?;
+                writeln!(writer, "payload: {:?}", event_payload)?;
             }
+
+            // Write the `valid_blocks_carried` if have
+            if !event.valid_blocks_carried.is_empty() {
+                write!(writer, "valid_blocks: {:?}", event.valid_blocks_carried)?;
+            }
+
+            // Write the `meta_votes` if have
             if let Some(event_meta_votes) = meta_votes.get(event_hash) {
                 if event_meta_votes.len() >= initial_events.len() {
                     let mut peer_ids: Vec<&P> = event_meta_votes.keys().collect();
