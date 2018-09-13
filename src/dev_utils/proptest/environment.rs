@@ -6,9 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use environment::{Environment, ObservationCount, PeerCount, RngChoice};
-use network::Network;
-use proptest::{Bounded, BoundedBoxedStrategy};
+use super::{Bounded, BoundedBoxedStrategy};
+use dev_utils::environment::{Environment, ObservationCount, PeerCount, RngChoice};
+use dev_utils::network::Network;
 use proptest_crate::prelude::RngCore;
 use proptest_crate::strategy::{NewTree, Strategy, ValueTree};
 use proptest_crate::test_runner::TestRunner;

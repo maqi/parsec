@@ -6,12 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use parsec::mock::{self, PeerId, Transaction};
-use parsec::{Request, Response};
-use peer::Peer;
-use schedule::{self, RequestTiming, Schedule, ScheduleEvent};
+use super::peer::Peer;
+use super::schedule::{self, RequestTiming, Schedule, ScheduleEvent};
+use super::Observation;
+use gossip::{Request, Response};
+use mock::{self, PeerId, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
-use Observation;
 
 enum Message {
     Request(Request<Transaction, PeerId>, usize),

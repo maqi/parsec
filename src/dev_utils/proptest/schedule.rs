@@ -7,13 +7,13 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::{Bounded, BoundedBoxedStrategy, EnvironmentStrategy, EnvironmentValueTree};
-use environment::Environment;
+use dev_utils::environment::Environment;
+use dev_utils::schedule::{
+    DelayDistribution, Request, RequestTiming, Schedule, ScheduleEvent, ScheduleOptions,
+};
 use proptest_crate::prelude::Just;
 use proptest_crate::strategy::{NewTree, Strategy, ValueTree};
 use proptest_crate::test_runner::TestRunner;
-use schedule::{
-    DelayDistribution, Request, RequestTiming, Schedule, ScheduleEvent, ScheduleOptions,
-};
 use std::collections::BTreeSet;
 
 #[derive(Debug)]
@@ -122,7 +122,7 @@ impl Strategy for ScheduleOptionsStrategy {
     }
 }
 
-// This struct is a wrapper around a mapped value tree that lets us implement Bounded
+/// This struct is a wrapper around a mapped value tree that lets us implement Bounded
 pub struct ScheduleOptionsValueTree {
     max_sched: ScheduleOptions,
     min_sched: ScheduleOptions,

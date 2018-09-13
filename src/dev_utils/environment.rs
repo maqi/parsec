@@ -6,11 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use super::Observation;
+use dev_utils::network::Network;
 use maidsafe_utilities::SeededRng;
-use network::Network;
+use observation::Observation as ParsecObservation;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
-use Observation;
 
 pub struct PeerCount(pub usize);
 pub struct ObservationCount(pub usize);
@@ -54,7 +55,7 @@ impl Environment {
 
         let network = Network::new(peer_count.0);
         let observations = (0..observation_count.0)
-            .map(|_| ::parsec::Observation::OpaquePayload(rng.gen()))
+            .map(|_| ParsecObservation::OpaquePayload(rng.gen()))
             .collect::<Vec<Observation>>();
 
         Self {

@@ -6,25 +6,18 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[macro_use]
-extern crate log;
-extern crate maidsafe_utilities;
-extern crate parsec;
-#[macro_use]
-extern crate proptest as proptest_crate;
-extern crate rand;
-#[macro_use]
-extern crate unwrap;
-
+/// This is used to read a dumped dot file and rebuild the event graph and associated info.
+mod dot_parser;
 mod environment;
 mod network;
 mod peer;
 pub mod proptest;
 mod schedule;
 
+pub use self::dot_parser::{parse_dot_file, ParsedContents};
 pub use self::environment::{Environment, ObservationCount, PeerCount, RngChoice};
 pub use self::network::Network;
 pub use self::peer::Peer;
 pub use self::schedule::*;
 
-type Observation = parsec::Observation<parsec::mock::Transaction, parsec::mock::PeerId>;
+type Observation = super::observation::Observation<super::mock::Transaction, super::mock::PeerId>;

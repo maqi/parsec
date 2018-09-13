@@ -994,12 +994,12 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
     }
 }
 
-#[cfg(test)]
-use dot_parser::ParsedContents;
-#[cfg(test)]
+#[cfg(all(test, feature = "testing"))]
+use dev_utils::ParsedContents;
+#[cfg(all(test, feature = "testing"))]
 use mock::{PeerId, Transaction};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "testing"))]
 impl Parsec<Transaction, PeerId> {
     #[allow(unused)]
     pub(crate) fn from_parsed_contents(peer_id: PeerId, parsed_contents: ParsedContents) -> Self {
@@ -1011,10 +1011,10 @@ impl Parsec<Transaction, PeerId> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "testing"))]
 mod tests {
     use super::*;
-    use dot_parser::parse_dot_file;
+    use dev_utils::parse_dot_file;
     use mock::{self, Transaction};
     use std::path::Path;
 

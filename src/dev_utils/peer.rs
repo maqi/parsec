@@ -6,16 +6,17 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use parsec::mock::{PeerId, Transaction};
-use parsec::{self, Block, Parsec};
+use super::Observation;
+use block::Block;
+use mock::{PeerId, Transaction};
+use parsec::{self, Parsec};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
-use Observation;
 
 pub struct Peer {
     pub id: PeerId,
     pub parsec: Parsec<Transaction, PeerId>,
-    // The blocks returned by `parsec.poll()`, held in the order in which they were returned.
+    /// The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     pub blocks: Vec<Block<Transaction, PeerId>>,
 }
 
@@ -43,7 +44,7 @@ impl Peer {
         }
     }
 
-    // Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
+    /// Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
     pub fn blocks_payloads(&self) -> Vec<&Observation> {
         self.blocks.iter().map(Block::payload).collect()
     }

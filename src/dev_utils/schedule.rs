@@ -7,9 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::Environment;
-use parsec::mock::PeerId;
+use super::Observation;
 #[cfg(feature = "dump-graphs")]
-use parsec::DIR;
+use dump_graph::DIR;
+use mock::PeerId;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -18,7 +19,6 @@ use std::fs::File;
 #[cfg(feature = "dump-graphs")]
 use std::io::Write;
 use std::mem;
-use Observation;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
 /// step.
@@ -285,6 +285,7 @@ pub struct ScheduleOptions {
 }
 
 impl ScheduleOptions {
+    /// Generates a delay according to the delay distribution
     pub fn gen_delay<R: Rng>(&self, rng: &mut R) -> usize {
         match self.delay_distr {
             DelayDistribution::Poisson(lambda) => poisson(rng, lambda),
@@ -409,10 +410,10 @@ impl Schedule {
         schedule.extend(other);
     }
 
-    // Creates a new pseudo-random schedule based on the given options
-    //
-    // The `let_and_return` clippy lint is allowed since it is actually necessary to create the
-    // `result` variable so the result can be saved when the `dump-graphs` feature is used.
+    /// Creates a new pseudo-random schedule based on the given options
+    ///
+    /// The `let_and_return` clippy lint is allowed since it is actually necessary to create the
+    /// `result` variable so the result can be saved when the `dump-graphs` feature is used.
     #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
         let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
