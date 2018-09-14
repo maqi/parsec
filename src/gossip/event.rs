@@ -12,6 +12,8 @@ use gossip::content::Content;
 use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
+#[cfg(test)]
+use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::Observation;
 use peer_list::PeerList;
@@ -330,10 +332,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
     }
 }
 
-#[cfg(feature = "testing")]
-use mock::{PeerId, Transaction};
-
-#[cfg(feature = "testing")]
+#[cfg(test)]
 impl Event<Transaction, PeerId> {
     // Creates a new event using the input parameters directly
     pub(crate) fn new_from_dot_input(

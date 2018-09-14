@@ -67,7 +67,7 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate maidsafe_utilities;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 #[macro_use]
 extern crate proptest as proptest_crate;
 #[macro_use]
@@ -82,9 +82,6 @@ extern crate tiny_keccak;
 extern crate unwrap;
 
 mod block;
-#[doc(hidden)]
-#[cfg(feature = "testing")]
-pub mod dev_utils;
 mod dump_graph;
 mod error;
 mod gossip;
@@ -98,6 +95,9 @@ mod peer_list;
 mod round_hash;
 mod vote;
 
+#[doc(hidden)]
+#[cfg(any(test, feature = "testing"))]
+pub mod dev_utils;
 #[doc(hidden)]
 /// **NOT FOR PRODUCTION USE**: Mock types which trivially implement the required Parsec traits.
 ///

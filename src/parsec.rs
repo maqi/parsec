@@ -7,12 +7,16 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use block::Block;
+#[cfg(test)]
+use dev_utils::ParsedContents;
 use dump_graph;
 use error::Error;
 use gossip::{Event, PackedEvent, Request, Response};
 use hash::Hash;
 use id::SecretId;
 use meta_vote::{MetaVote, Step};
+#[cfg(test)]
+use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::Observation;
 use peer_list::PeerList;
@@ -994,12 +998,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
     }
 }
 
-#[cfg(all(test, feature = "testing"))]
-use dev_utils::ParsedContents;
-#[cfg(all(test, feature = "testing"))]
-use mock::{PeerId, Transaction};
-
-#[cfg(all(test, feature = "testing"))]
+#[cfg(test)]
 impl Parsec<Transaction, PeerId> {
     #[allow(unused)]
     pub(crate) fn from_parsed_contents(peer_id: PeerId, parsed_contents: ParsedContents) -> Self {
@@ -1011,7 +1010,7 @@ impl Parsec<Transaction, PeerId> {
     }
 }
 
-#[cfg(all(test, feature = "testing"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use dev_utils::parse_dot_file;

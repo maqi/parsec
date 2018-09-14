@@ -58,7 +58,6 @@
 extern crate maidsafe_utilities;
 #[cfg(feature = "testing")]
 extern crate parsec;
-#[cfg(feature = "testing")]
 #[macro_use]
 #[cfg(feature = "testing")]
 extern crate proptest;

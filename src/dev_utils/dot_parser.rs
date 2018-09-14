@@ -366,7 +366,6 @@ fn extract_between<'a>(input: &'a str, left: &str, right: &str) -> &'a str {
     unwrap!(unwrap!(input.split(left).nth(1)).split(right).next())
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;

@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 /// This is used to read a dumped dot file and rebuild the event graph and associated info.
+#[cfg(test)]
 mod dot_parser;
 mod environment;
 mod network;
@@ -14,6 +15,7 @@ mod peer;
 pub mod proptest;
 mod schedule;
 
+#[cfg(test)]
 pub use self::dot_parser::{parse_dot_file, ParsedContents};
 pub use self::environment::{Environment, ObservationCount, PeerCount, RngChoice};
 pub use self::network::Network;

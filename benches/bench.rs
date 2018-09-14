@@ -54,14 +54,20 @@
 )]
 
 #[macro_use]
+#[cfg(feature = "testing")]
 extern crate criterion;
-extern crate parsec_dev_utils;
+#[cfg(feature = "testing")]
+extern crate parsec;
 
+#[cfg(feature = "testing")]
 use criterion::Criterion;
-use parsec_dev_utils::{
+
+#[cfg(feature = "testing")]
+use parsec::dev_utils::{
     Environment, ObservationCount, PeerCount, RngChoice, Schedule, ScheduleOptions,
 };
 
+#[cfg(feature = "testing")]
 fn bench(c: &mut Criterion) {
     let _ = c.bench_function("minimal", |b| {
         b.iter_with_setup(
@@ -79,5 +85,13 @@ fn bench(c: &mut Criterion) {
     });
 }
 
+#[cfg(feature = "testing")]
 criterion_group!(benches, bench);
+
+#[cfg(feature = "testing")]
 criterion_main!(benches);
+
+#[cfg(not(feature = "testing"))]
+fn main() {
+    println!("For benchmark tests, run with '--features=testing'.");
+}
