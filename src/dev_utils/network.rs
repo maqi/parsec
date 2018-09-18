@@ -26,6 +26,8 @@ struct QueueEntry {
 
 pub struct Network {
     pub peers: Vec<Peer>,
+    pub allow_add_error: bool,
+    pub allow_removal_error: bool,
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
@@ -52,6 +54,8 @@ impl Network {
             .collect();
         Network {
             peers,
+            allow_add_error: false,
+            allow_removal_error: false,
             msg_queue: BTreeMap::new(),
         }
     }
@@ -105,11 +109,18 @@ impl Network {
             for entry in to_handle {
                 match entry.message {
                     Message::Request(req, resp_delay) => {
-                        let response = unwrap!(
-                            self.peer_mut(peer)
-                                .parsec
-                                .handle_request(&entry.sender, req)
-                        );
+                        let response = if let Ok(rsp) = self
+                            .peer_mut(peer)
+                            .parsec
+                            .handle_request(&entry.sender, req)
+                        {
+                            rsp
+                        } else {
+                            if !(self.allow_removal_error || self.allow_add_error) {
+                                panic!("handle request with error");
+                            }
+                            continue;
+                        };
                         self.send_message(
                             peer.clone(),
                             &entry.sender,
@@ -118,11 +129,15 @@ impl Network {
                         );
                     }
                     Message::Response(resp) => {
-                        unwrap!(
-                            self.peer_mut(peer)
-                                .parsec
-                                .handle_response(&entry.sender, resp)
-                        );
+                        if let Err(error) = self
+                            .peer_mut(peer)
+                            .parsec
+                            .handle_response(&entry.sender, resp)
+                        {
+                            if !(self.allow_removal_error || self.allow_add_error) {
+                                panic!("handle response with {:?}", error);
+                            }
+                        }
                     }
                 }
             }
@@ -168,11 +183,18 @@ impl Network {
                     let has_new_data = self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
                     let mut handle_req = |req: schedule::Request| {
-                        let request = unwrap!(
-                            self.peer(&peer)
-                                .parsec
-                                .create_gossip(Some(req.recipient.clone()))
-                        );
+                        let request = if let Ok(req) = self
+                            .peer(&peer)
+                            .parsec
+                            .create_gossip(Some(req.recipient.clone()))
+                        {
+                            req
+                        } else {
+                            if !(self.allow_removal_error || self.allow_add_error) {
+                                panic!("create gossip with error");
+                            }
+                            return;
+                        };
                         self.send_message(
                             peer.clone(),
                             &req.recipient,

@@ -107,6 +107,11 @@ pub fn create_ids(count: usize) -> Vec<PeerId> {
     NAMES.iter().take(count).cloned().map(PeerId::new).collect()
 }
 
+pub fn get_id(pos: usize) -> PeerId {
+    assert!(pos < names_len());
+    PeerId::new(NAMES[pos])
+}
+
 pub fn names_len() -> usize {
     NAMES.len()
 }

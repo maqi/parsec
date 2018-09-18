@@ -9,6 +9,7 @@
 use super::Observation;
 use dev_utils::network::Network;
 use maidsafe_utilities::SeededRng;
+use mock::get_id;
 use observation::Observation as ParsecObservation;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
@@ -63,6 +64,23 @@ impl Environment {
             observations,
             rng,
         }
+    }
+
+    /// Vote to remove one peer from the network.
+    pub fn remove_one_peer(&mut self) {
+        let removed_peer = unwrap!(self.network.peers.last());
+        self.observations.clear();
+        self.observations
+            .push(ParsecObservation::Remove(removed_peer.id.clone()));
+        self.network.allow_removal_error = true;
+    }
+
+    /// Vote to add one peer to the network.
+    pub fn add_one_peer(&mut self) {
+        self.observations.clear();
+        self.observations
+            .push(ParsecObservation::Add(get_id(self.network.peers.len())));
+        self.network.allow_add_error = true;
     }
 }
 

@@ -174,6 +174,53 @@ mod test {
     }
 
     #[test]
+    #[ignore]
+    fn vote_to_remove_one_keeps_gossip() {
+        let num_peers = 10;
+        let num_observations = 1;
+        let num_faulty = 1;
+        let mut env = Environment::new(
+            &PeerCount(num_peers),
+            &ObservationCount(num_observations),
+            SEED,
+        );
+        env.remove_one_peer();
+
+        let mut failures = BTreeMap::new();
+        let _ = failures.insert(0, num_faulty);
+        let schedule = Schedule::new(
+            &mut env,
+            &ScheduleOptions {
+                deterministic_failures: failures,
+                ..Default::default()
+            },
+        );
+        env.network.execute_schedule(schedule);
+
+        let result = env.network.blocks_all_in_sequence();
+        assert!(result.is_ok(), "{:?}", result);
+    }
+
+    #[test]
+    #[ignore]
+    fn vote_to_add_one_peer() {
+        let num_peers = 10;
+        let num_observations = 1;
+        let mut env = Environment::new(
+            &PeerCount(num_peers),
+            &ObservationCount(num_observations),
+            SEED,
+        );
+        env.add_one_peer();
+
+        let schedule = Schedule::new(&mut env, &Default::default());
+        env.network.execute_schedule(schedule);
+
+        let result = env.network.blocks_all_in_sequence();
+        assert!(result.is_ok(), "{:?}", result);
+    }
+
+    #[test]
     fn faulty_third_terminate_concurrently() {
         let num_peers = 10;
         let num_observations = 10;
