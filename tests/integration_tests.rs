@@ -174,7 +174,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn vote_to_remove_one_keeps_gossip() {
         let num_peers = 10;
         let num_observations = 1;
@@ -182,9 +181,10 @@ mod test {
         let mut env = Environment::new(
             &PeerCount(num_peers),
             &ObservationCount(num_observations),
-            SEED,
+            RngChoice::Seeded([3705034280, 4211696820, 1044590073, 2243499626]),
         );
         env.remove_one_peer();
+        println!("seed: {:?}", env.rng);
 
         let mut failures = BTreeMap::new();
         let _ = failures.insert(0, num_faulty);
@@ -202,7 +202,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn vote_to_add_one_peer() {
         let num_peers = 10;
         let num_observations = 1;

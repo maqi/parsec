@@ -23,7 +23,10 @@ use peer_list::PeerList;
 use round_hash::RoundHash;
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+// use std::fs::File;
+// use std::io::Write;
 use std::iter;
+// use std::path::PathBuf;
 
 pub type IsInterestingEventFn<P> = fn(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool;
 
@@ -354,6 +357,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         packed_events: Vec<PackedEvent<T, S::PublicId>>,
     ) -> Result<(), Error> {
+        // let file_path = PathBuf::from(format!("{:?}_{:?}.packed", self.our_pub_id(), src));
+        // println!(
+        //     "{:?} is writing to file {:?}",
+        //     self.our_pub_id(),
+        //     file_path.file_name()
+        // );
+        // let serialised_packed_events = serialise(&packed_events);
+        // let mut file = unwrap!(File::create(&file_path));
+        // unwrap!(file.write_all(&serialised_packed_events));
+
         self.confirm_self_not_removed()?;
         self.confirm_peer_not_removed(src)?;
         for packed_event in packed_events {
@@ -385,6 +398,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_meta_votes(event_hash)?;
         self.update_round_hashes(event_hash);
         if let Some(block) = self.next_stable_block() {
+            println!("{:?} is dumping graph", self.our_pub_id());
             dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
             self.clear_consensus_data(block.payload());
             let payload_hash = Hash::from(serialise(block.payload()).as_slice());
@@ -1078,9 +1092,10 @@ impl Parsec<Transaction, PeerId> {
 }
 
 #[cfg(test)]
-mod tests {
+mod functional_tests {
     use super::*;
-    use dev_utils::parse_test_dot_file;
+    use dev_utils::{get_packed_events_str, parse_test_dot_file};
+    use maidsafe_utilities::serialisation::deserialise;
     use mock::{self, Transaction};
 
     #[test]
@@ -1142,5 +1157,21 @@ mod tests {
         assert_ne!(parsed_contents_other.events, parsec.events);
         assert_ne!(parsed_contents_other.events_order, parsec.events_order);
         assert_ne!(parsed_contents_other.meta_votes, parsec.meta_votes);
+    }
+
+    #[test]
+    fn remove_peer() {
+        let parsed_contents = parse_test_dot_file("Alice.dot");
+        let peer_id = PeerId::new("Alice");
+        let mut parsec = Parsec::from_parsed_contents(peer_id, parsed_contents);
+
+        let packed_events_str = get_packed_events_str("Alice_Dave.packed");
+        let packed_events: Vec<PackedEvent<Transaction, PeerId>> =
+            unwrap!(deserialise(&packed_events_str));
+
+        let result = parsec.unpack_and_add_events(&PeerId::new("Dave"), packed_events);
+        println!("result: {:?}", result);
+        println!("block: {:?}", parsec.poll());
+        println!("peers: {:?}", parsec.peer_list.all_ids());
     }
 }

@@ -55,6 +55,17 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
     )
 }
 
+/// Get the content of the dumped packed events.
+pub(crate) fn get_packed_events_str(filename: &str) -> Vec<u8> {
+    let mut packed_events_path = PathBuf::from("input_graphs");
+    packed_events_path.push(unwrap!(thread::current().name()).replace("::", "_"));
+    packed_events_path.push(filename);
+    let mut file = unwrap!(File::open(packed_events_path));
+    let mut content = Vec::new();
+    let _ = unwrap!(file.read_to_end(&mut content));
+    content
+}
+
 fn open_corresponding_svg(dot_path: &Path) -> File {
     let mut svg_path = dot_path.to_owned();
     assert!(svg_path.set_extension("dot.svg"));
