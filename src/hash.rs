@@ -27,6 +27,10 @@ impl Hash {
         }
         Ordering::Equal
     }
+
+    pub fn all_zero() -> Self {
+        Hash([0; HASH_LEN])
+    }
 }
 
 impl<'a> From<&'a [u8]> for Hash {
@@ -42,12 +46,5 @@ impl Debug for Hash {
             "{:02x}{:02x}{:02x}{:02x}{:02x}..",
             self.0[0], self.0[1], self.0[2], self.0[3], self.0[4]
         )
-    }
-}
-
-#[cfg(any(test, feature = "dump-graphs"))]
-impl Hash {
-    pub fn all_zero() -> Self {
-        Hash([0; HASH_LEN])
     }
 }

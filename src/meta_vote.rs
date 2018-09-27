@@ -6,6 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use hash::Hash;
+use id::PublicId;
 use parsec::is_more_than_two_thirds;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
@@ -420,5 +422,78 @@ impl MetaVoteCounts {
 
     fn at_least_one_third(&self, count: usize) -> bool {
         3 * count >= self.total_peers
+    }
+}
+
+pub(super) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;
+
+pub(super) struct MetaVotesMap<P: PublicId> {
+    // Block hash of the current round of consensus. Use 'all_zero' hash for the first round, and
+    // the 'last_stable_block_hash' for the next rounds.
+    last_stable_block_hash: Hash,
+    // The meta votes of the events, indexing by `last_stable_block_hash`.
+    meta_votes: BTreeMap<Hash, MetaVotes<P>>,
+}
+
+impl<P: PublicId> MetaVotesMap<P> {
+    pub(super) fn new() -> Self {
+        let mut meta_votes = BTreeMap::new();
+        let last_stable_block_hash = Hash::all_zero();
+        let _ = meta_votes.insert(last_stable_block_hash, BTreeMap::new());
+        MetaVotesMap {
+            last_stable_block_hash,
+            meta_votes,
+        }
+    }
+
+    pub(super) fn get(&self, event_hash: &Hash) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
+        self.meta_votes
+            .get(&self.last_stable_block_hash)
+            .and_then(|votes| votes.get(event_hash))
+    }
+
+    pub(super) fn insert(&mut self, event_hash: Hash, meta_votes: BTreeMap<P, Vec<MetaVote>>) {
+        let _ = self
+            .meta_votes
+            .entry(self.last_stable_block_hash)
+            .and_modify(|votes| {
+                let _ = votes.insert(event_hash, meta_votes);
+            });
+    }
+
+    #[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
+    pub(super) fn last_meta_votes(&self) -> &MetaVotes<P> {
+        unwrap!(self.meta_votes.get(&self.last_stable_block_hash))
+    }
+
+    #[cfg(not(any(test, feature = "testing", feature = "dump-graphs")))]
+    pub(super) fn last_meta_votes(&self) -> &MetaVotes<P> {
+        if let Some(votes) = self.meta_votes.get(&self.last_stable_block_hash) {
+            votes
+        } else {
+            panic!(
+                "MetaVotesMap {:?} doesn't contain own last_stable_block_hash {:?}",
+                self.meta_votes.keys(),
+                self.last_stable_block_hash
+            )
+        }
+    }
+
+    pub(super) fn update_last_block_hash(&mut self, payload_hash: Hash) {
+        self.last_stable_block_hash = payload_hash;
+        let _ = self.meta_votes.insert(payload_hash, BTreeMap::new());
+    }
+}
+
+#[cfg(test)]
+impl<P: PublicId> MetaVotesMap<P> {
+    pub(super) fn new_from_parsed(votes: MetaVotes<P>) -> Self {
+        let mut meta_votes = BTreeMap::new();
+        let last_stable_block_hash = Hash::all_zero();
+        let _ = meta_votes.insert(last_stable_block_hash, votes);
+        MetaVotesMap {
+            last_stable_block_hash,
+            meta_votes,
+        }
     }
 }
