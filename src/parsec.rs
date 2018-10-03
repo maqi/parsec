@@ -20,7 +20,6 @@ use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation};
 use peer_list::{PeerList, PeerState};
-use round_hash::RoundHash;
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter;
@@ -56,13 +55,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     interesting_events: BTreeMap<S::PublicId, VecDeque<Hash>>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
-    // Hash of all payloads that were consensused ever
-    consensus_history: Vec<Hash>,
     // The map of meta votes of the events on each consensus block.
     meta_votes_map: MetaVotesMap<S::PublicId>,
-    // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
-    // the one for round `x` is held at index `x`.
-    round_hashes: BTreeMap<S::PublicId, Vec<RoundHash>>,
     is_interesting_event: IsInterestingEventFn<S::PublicId>,
 }
 
@@ -86,7 +80,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .add_peer(peer_id.clone(), PeerState::active());
         }
 
-        parsec.initialise_round_hashes();
+        parsec
+            .meta_votes_map
+            .initialise_round_hashes(parsec.peer_list.all_ids());
 
         // Add initial event.
         let event = Event::new_initial(&parsec.peer_list);
@@ -157,7 +153,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND);
         }
 
-        parsec.initialise_round_hashes();
+        parsec
+            .meta_votes_map
+            .initialise_round_hashes(parsec.peer_list.all_ids());
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -181,9 +179,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             events_order: vec![],
             interesting_events: BTreeMap::new(),
             consensused_blocks: VecDeque::new(),
-            consensus_history: vec![],
             meta_votes_map: MetaVotesMap::new(),
-            round_hashes: BTreeMap::new(),
             is_interesting_event,
         }
     }
@@ -465,7 +461,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
         self.set_observations(event_hash)?;
         self.set_meta_votes(event_hash)?;
-        self.update_round_hashes(event_hash);
+        self.meta_votes_map
+            .update_last_election_round_hashes(event_hash);
 
         if let Some(block) = self.next_stable_block(event_hash) {
             dump_graph::to_file(
@@ -480,13 +477,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             info!(
                 "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
                 self.our_pub_id(),
-                self.consensus_history.len(),
+                self.meta_votes_map.consensus_history().len(),
                 block.payload(),
                 payload_hash
             );
-            self.meta_votes_map.update_last_block_hash(payload_hash);
+            self.meta_votes_map.push_last_block_hash(payload_hash);
 
-            self.consensus_history.push(payload_hash);
             let observation = block.payload().clone();
             self.consensused_blocks.push_back(block);
 
@@ -494,7 +490,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return Ok(());
             }
 
-            self.restart_consensus(&payload_hash);
+            self.restart_consensus();
         }
         Ok(())
     }
@@ -644,7 +640,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         payload: &Observation<T, S::PublicId>,
     ) -> BTreeMap<&S::PublicId, u64> {
         let payload_already_reached_consensus = self
-            .consensus_history
+            .meta_votes_map
+            .consensus_history()
             .iter()
             .any(|payload_hash| *payload_hash == Hash::from(serialise(&payload).as_slice()));
         if payload_already_reached_consensus {
@@ -697,10 +694,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // from those ones.
         {
             let event = self.get_known_event(event_hash)?;
-            if let Some(parent_votes) = self
-                .self_parent(event)
-                .and_then(|parent| self.meta_votes_map.get(parent.hash()).cloned())
-            {
+            if let Some(parent_votes) = self.self_parent(event).and_then(|parent| {
+                self.meta_votes_map
+                    .get_mvs_from_last_election(parent.hash())
+                    .cloned()
+            }) {
                 for (peer_id, parent_event_votes) in parent_votes {
                     let new_meta_votes = {
                         let other_votes = self.collect_other_meta_votes(&peer_id, event);
@@ -728,32 +726,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         if !meta_votes.is_empty() {
-            self.meta_votes_map.insert(*event_hash, meta_votes);
+            self.meta_votes_map
+                .insert_into_last_election(*event_hash, meta_votes);
         }
         Ok(())
-    }
-
-    fn initialise_round_hashes(&mut self) {
-        let initial_hash = Hash::from([].as_ref());
-        for (peer_id, _) in self.peer_list.iter() {
-            let round_hash = RoundHash::new(peer_id, initial_hash);
-            let _ = self.round_hashes.insert(peer_id.clone(), vec![round_hash]);
-        }
-    }
-
-    fn update_round_hashes(&mut self, event_hash: &Hash) {
-        if let Some(meta_votes) = self.meta_votes_map.get(event_hash) {
-            for (peer_id, event_votes) in meta_votes.iter() {
-                for meta_vote in event_votes {
-                    if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
-                        while hashes.len() < meta_vote.round + 1 {
-                            let next_round_hash = hashes[hashes.len() - 1].increment_round();
-                            hashes.push(next_round_hash);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn toss_coins(
@@ -795,12 +771,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         } else {
             return Ok(None);
         };
-        let round_hash = if let Some(hashes) = self.round_hashes.get(peer_id) {
-            hashes[round].value()
-        } else {
-            log_or_panic!("{:?} missing round hash.", self.our_pub_id());
-            return Err(Error::Logic);
-        };
+        let round_hash =
+            if let Some(hashes) = self.meta_votes_map.get_rhs_from_last_election(peer_id) {
+                hashes[round].value()
+            } else {
+                log_or_panic!("{:?} missing round hash.", self.our_pub_id());
+                return Err(Error::Logic);
+            };
 
         // Get the gradient of leadership.
         let mut peer_id_hashes = self.peer_list.peer_id_hashes().clone();
@@ -878,7 +855,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         };
         self.meta_votes_map
-            .get(&hash)
+            .get_mvs_from_last_election(&hash)
             .and_then(|meta_votes| meta_votes.get(event.creator()))
             .map_or(false, |event_votes| {
                 event_votes
@@ -901,7 +878,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if let Some(event_hash) = self.peer_list.event_by_index(creator, creator_event_index) {
             if let Some(latest_votes) = self
                 .meta_votes_map
-                .get(event_hash)
+                .get_mvs_from_last_election(event_hash)
                 .and_then(|meta_votes| meta_votes.get(peer_id))
                 .map(|meta_votes| {
                     meta_votes
@@ -955,7 +932,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn next_stable_block(&mut self, event_hash: &Hash) -> Option<Block<T, S::PublicId>> {
         self.meta_votes_map
-            .get(event_hash)
+            .get_mvs_from_last_election(event_hash)
             .and_then(|last_meta_votes| {
                 let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
                     let vote = event_votes.last();
@@ -1020,7 +997,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn clear_consensus_data(&mut self) {
         // Clear all leftover data from previous consensus
-        self.round_hashes = BTreeMap::new();
         self.interesting_events = BTreeMap::new();
 
         for event in self.events.values_mut() {
@@ -1029,14 +1005,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn restart_consensus(&mut self, latest_block_hash: &Hash) {
-        self.round_hashes = self
-            .peer_list
-            .all_ids()
-            .map(|peer_id| {
-                let round_hash = RoundHash::new(peer_id, *latest_block_hash);
-                (peer_id.clone(), vec![round_hash])
-            }).collect();
+    fn restart_consensus(&mut self) {
+        self.meta_votes_map
+            .restart_last_election_round_hashes(self.peer_list.all_ids());
         let events_hashes = self.events_order.to_vec();
         for event_hash in events_hashes {
             let _ = self.set_interesting_content(&event_hash);
@@ -1250,9 +1221,7 @@ mod functional_tests {
         events: BTreeSet<Hash>,
         events_order: Vec<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        consensus_history: Vec<Hash>,
         meta_votes: MetaVotes<PeerId>,
-        round_hashes: BTreeMap<PeerId, Vec<RoundHash>>,
     }
 
     impl Snapshot {
@@ -1269,9 +1238,7 @@ mod functional_tests {
                 events,
                 events_order: parsec.events_order.clone(),
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                consensus_history: parsec.consensus_history.clone(),
                 meta_votes: parsec.meta_votes_map.last_meta_votes().clone(),
-                round_hashes: parsec.round_hashes.clone(),
             }
         }
     }
