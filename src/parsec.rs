@@ -20,6 +20,7 @@ use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation};
 use peer_list::{PeerList, PeerState};
+use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{iter, mem, u64};
 use vote::Vote;
@@ -1458,6 +1459,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn detect_malice_before_process(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
         // NOTE: `detect_incorrect_genesis` must come first.
         self.detect_incorrect_genesis(event)?;
+        self.detect_other_parent_by_same_creator(event)?;
 
         self.detect_unexpected_genesis(event);
         self.detect_missing_genesis(event);
@@ -1490,6 +1492,27 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         Ok(())
+    }
+
+    // Detect if the event's other_parent has the same creator as this event.
+    fn detect_other_parent_by_same_creator(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
+        if event.other_parent().is_none() {
+            return Ok(());
+        }
+
+        if let Some(other_parent) = self.other_parent(event) {
+            if other_parent.creator() != event.creator() {
+                return Ok(());
+            }
+        }
+
+        // Raise the accusation immediately and return an error, to prevent accepting
+        // potentially large number of invalid / spam events into our graph.
+        self.create_accusation_event(
+            event.creator().clone(),
+            Malice::OtherParentBySameCreator(serialise(event).as_slice().to_vec()),
+        )?;
+        Err(Error::InvalidEvent)
     }
 
     // Detect whether the event carries unexpected `Observation::Genesis`.

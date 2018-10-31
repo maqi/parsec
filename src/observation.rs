@@ -65,5 +65,8 @@ pub enum Malice {
     /// Contains hash of the sync event whose creator shall detect such malice however failed to
     /// raise an accusation.
     Accomplice(Hash),
+    /// Event's creator is the same to its other_parent's creator. The accusation contains the
+    /// original event so other peers can verify the accusation directly.
+    OtherParentBySameCreator(Vec<u8>),
     // TODO: add other malice variants
 }
