@@ -12,4 +12,7 @@ use std::fmt::Debug;
 
 /// This represents the type which will be voted for by peers; generally it is the set of
 /// constraints on `T` throughout this library.
-pub trait NetworkEvent: Clone + Eq + Ord + Serialize + DeserializeOwned + Debug {}
+pub trait NetworkEvent:
+    Clone + Eq + Ord + PartialEq + PartialOrd + Serialize + DeserializeOwned + Debug
+{
+}

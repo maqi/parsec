@@ -11,7 +11,7 @@ use block::Block;
 use dev_utils::ParsedContents;
 use dump_graph;
 use error::{Error, Result};
-use gossip::{Event, PackedEvent, Request, Response};
+use gossip::{Event, PackedEvent, Request, Response, WrappedEvent};
 use hash::Hash;
 use id::SecretId;
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
@@ -20,13 +20,14 @@ use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation};
 use peer_list::{PeerList, PeerState};
-use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{iter, mem, u64};
 use vote::Vote;
 
 pub type IsInterestingEventFn<P> =
     fn(peers_that_did_vote: &BTreeSet<P>, peers_that_can_vote: &BTreeSet<P>) -> bool;
+
+type PendingAccusations<T, P> = Vec<(P, Malice<T, P>)>;
 
 /// Returns whether `small` is more than two thirds of `large`.
 pub fn is_more_than_two_thirds(small: usize, large: usize) -> bool {
@@ -60,7 +61,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The map of meta votes of the events on each consensus block.
     meta_elections: MetaElections<T, S::PublicId>,
     // Accusations to raise at the end of the processing of current gossip message.
-    pending_accusations: Vec<(S::PublicId, Malice)>,
+    pending_accusations: PendingAccusations<T, S::PublicId>,
     is_interesting_event: IsInterestingEventFn<S::PublicId>,
 }
 
@@ -1459,6 +1460,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn detect_malice_before_process(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
         // NOTE: `detect_incorrect_genesis` must come first.
         self.detect_incorrect_genesis(event)?;
+
         self.detect_other_parent_by_same_creator(event)?;
 
         self.detect_unexpected_genesis(event);
@@ -1496,21 +1498,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Detect if the event's other_parent has the same creator as this event.
     fn detect_other_parent_by_same_creator(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
-        if event.other_parent().is_none() {
-            return Ok(());
-        }
-
         if let Some(other_parent) = self.other_parent(event) {
             if other_parent.creator() != event.creator() {
                 return Ok(());
             }
+        } else {
+            return Ok(());
         }
 
         // Raise the accusation immediately and return an error, to prevent accepting
         // potentially large number of invalid / spam events into our graph.
         self.create_accusation_event(
             event.creator().clone(),
-            Malice::OtherParentBySameCreator(serialise(event).as_slice().to_vec()),
+            Malice::OtherParentBySameCreator(Box::new(WrappedEvent(event.pack()))),
         )?;
         Err(Error::InvalidEvent)
     }
@@ -1761,11 +1761,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn accuse(&mut self, offender: S::PublicId, malice: Malice) {
+    fn accuse(&mut self, offender: S::PublicId, malice: Malice<T, S::PublicId>) {
         self.pending_accusations.push((offender, malice));
     }
 
-    fn create_accusation_event(&mut self, offender: S::PublicId, malice: Malice) -> Result<()> {
+    fn create_accusation_event(
+        &mut self,
+        offender: S::PublicId,
+        malice: Malice<T, S::PublicId>,
+    ) -> Result<()> {
         let event = Event::new_from_observation(
             self.our_last_event_hash(),
             Observation::Accusation { offender, malice },

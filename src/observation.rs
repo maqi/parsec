@@ -6,6 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use gossip::WrappedEvent;
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
@@ -27,7 +28,7 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
         /// Public id of the peer committing the malice.
         offender: P,
         /// Type of the malice committed.
-        malice: Malice,
+        malice: Malice<T, P>,
     },
     /// Vote for an event which is opaque to Parsec.
     OpaquePayload(T),
@@ -41,8 +42,9 @@ impl<T: NetworkEvent, P: PublicId> Observation<T, P> {
 }
 
 /// Type of malicious behaviour.
+#[serde(bound = "")]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
-pub enum Malice {
+pub enum Malice<T: NetworkEvent, P: PublicId> {
     /// Event carries a vote for `Observation::Genesis`, but shouldn't.
     UnexpectedGenesis(Hash),
     /// Two or more votes with the same observation by the same creator.
@@ -67,6 +69,6 @@ pub enum Malice {
     Accomplice(Hash),
     /// Event's creator is the same to its other_parent's creator. The accusation contains the
     /// original event so other peers can verify the accusation directly.
-    OtherParentBySameCreator(Vec<u8>),
+    OtherParentBySameCreator(Box<WrappedEvent<T, P>>),
     // TODO: add other malice variants
 }

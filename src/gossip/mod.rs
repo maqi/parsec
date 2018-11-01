@@ -16,4 +16,4 @@ mod packed_event;
 pub(super) use self::event::find_event_by_short_name;
 pub(super) use self::event::Event;
 pub use self::messages::{Request, Response};
-pub(super) use self::packed_event::PackedEvent;
+pub(super) use self::packed_event::{PackedEvent, WrappedEvent};

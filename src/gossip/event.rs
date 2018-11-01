@@ -148,7 +148,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Creates a `PackedEvent` from this `Event`.
-    pub(super) fn pack(&self) -> PackedEvent<T, P> {
+    pub(crate) fn pack(&self) -> PackedEvent<T, P> {
         PackedEvent {
             content: self.content.clone(),
             signature: self.signature.clone(),

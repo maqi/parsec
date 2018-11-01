@@ -13,7 +13,7 @@ use std::fmt::{self, Display, Formatter};
 use vote::Vote;
 
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hashes are the latest `Event` of own and the peer which sent the request.
     Request {

@@ -14,7 +14,11 @@ use network_event::NetworkEvent;
 use std::fmt::{self, Debug, Formatter};
 
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
+pub struct WrappedEvent<T: NetworkEvent, P: PublicId>(pub(crate) PackedEvent<T, P>);
+
+#[serde(bound = "")]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) struct PackedEvent<T: NetworkEvent, P: PublicId> {
     pub(super) content: Content<T, P>,
     pub(super) signature: P::Signature,

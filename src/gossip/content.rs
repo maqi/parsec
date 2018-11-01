@@ -12,7 +12,7 @@ use id::PublicId;
 use network_event::NetworkEvent;
 
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Content<T: NetworkEvent, P: PublicId> {
     // ID of peer which created this `Event`.
     pub creator: P,
