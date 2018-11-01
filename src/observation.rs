@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::WrappedEvent;
+use gossip::PackedEvent;
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
@@ -69,6 +69,6 @@ pub enum Malice<T: NetworkEvent, P: PublicId> {
     Accomplice(Hash),
     /// Event's creator is the same to its other_parent's creator. The accusation contains the
     /// original event so other peers can verify the accusation directly.
-    OtherParentBySameCreator(Box<WrappedEvent<T, P>>),
+    OtherParentBySameCreator(Box<PackedEvent<T, P>>),
     // TODO: add other malice variants
 }

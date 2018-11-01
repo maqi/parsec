@@ -11,7 +11,7 @@ use block::Block;
 use dev_utils::ParsedContents;
 use dump_graph;
 use error::{Error, Result};
-use gossip::{Event, PackedEvent, Request, Response, WrappedEvent};
+use gossip::{Event, PackedEvent, Request, Response};
 use hash::Hash;
 use id::SecretId;
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
@@ -1510,7 +1510,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // potentially large number of invalid / spam events into our graph.
         self.create_accusation_event(
             event.creator().clone(),
-            Malice::OtherParentBySameCreator(Box::new(WrappedEvent(event.pack()))),
+            Malice::OtherParentBySameCreator(Box::new(event.pack())),
         )?;
         Err(Error::InvalidEvent)
     }
