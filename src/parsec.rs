@@ -633,6 +633,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .iter()
                 .map(|(hash, info)| (hash, &info.observation))
                 .collect(),
+            Some(payload_hash),
         );
 
         let payload = self
@@ -1944,6 +1945,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
                     .iter()
                     .map(|(hash, info)| (hash, &info.observation))
                     .collect(),
+                None,
             );
         }
     }

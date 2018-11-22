@@ -338,9 +338,12 @@ impl<P: PublicId> MetaElections<P> {
         );
         if let Entry::Occupied(mut entry) = self.previous_elections.entry(handle) {
             let _ = entry.get_mut().undecided_voters.remove(peer_id);
-            if entry.get().undecided_voters.is_empty() {
-                trace!("mark_as_decided: Removing meta-election {:?}", handle);
-                let _ = entry.remove();
+            #[cfg(not(feature = "dump-graphs"))]
+            {
+                if entry.get().undecided_voters.is_empty() {
+                    trace!("mark_as_decided: Removing meta-election {:?}", handle);
+                    let _ = entry.remove();
+                }
             }
         } else {
             Self::not_found(handle)
