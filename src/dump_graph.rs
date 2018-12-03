@@ -36,6 +36,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     meta_elections: &MetaElections<S::PublicId>,
     peer_list: &PeerList<S>,
     observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
+    payload_hash: Option<&ObservationHash>,
 ) {
     detail::to_file(
         owner_id,
@@ -43,6 +44,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         meta_elections,
         peer_list,
         observations,
+        payload_hash,
     )
 }
 #[cfg(not(feature = "dump-graphs"))]
@@ -52,6 +54,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &MetaElections<S::PublicId>,
     _: &PeerList<S>,
     _: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
+    _: Option<&ObservationHash>,
 ) {
 }
 
@@ -62,7 +65,9 @@ pub use self::detail::DIR;
 mod detail {
     use gossip::{Event, EventHash, EventIndex, Graph, GraphSnapshot, IndexedEventRef};
     use id::{PublicId, SecretId};
-    use meta_voting::{MetaElections, MetaElectionsSnapshot, MetaEvent, MetaVotes};
+    use meta_voting::{
+        MetaElectionHandle, MetaElections, MetaElectionsSnapshot, MetaEvent, MetaVotes,
+    };
     use network_event::NetworkEvent;
     use observation::{Observation, ObservationHash};
     use peer_list::PeerList;
@@ -142,6 +147,7 @@ mod detail {
         meta_elections: &MetaElections<S::PublicId>,
         peer_list: &PeerList<S>,
         observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
+        payload_hash: Option<&ObservationHash>,
     ) {
         let id = format!("{:?}", owner_id);
         let call_count = DUMP_COUNTS.with(|counts| {
@@ -159,6 +165,7 @@ mod detail {
             meta_elections,
             peer_list,
             observations,
+            payload_hash,
         ) {
             Ok(mut dot_writer) => {
                 if let Err(error) = dot_writer.write() {
@@ -299,6 +306,7 @@ mod detail {
         meta_elections: &'a MetaElections<S::PublicId>,
         peer_list: &'a PeerList<S>,
         observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
+        payload_hash: Option<&'a ObservationHash>,
         indent: usize,
     }
 
@@ -311,6 +319,7 @@ mod detail {
             meta_elections: &'a MetaElections<S::PublicId>,
             peer_list: &'a PeerList<S>,
             observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
+            payload_hash: Option<&'a ObservationHash>,
         ) -> io::Result<Self> {
             File::create(&file_path).map(|file| DotWriter {
                 file: BufWriter::new(file),
@@ -318,6 +327,7 @@ mod detail {
                 meta_elections,
                 peer_list,
                 observations,
+                payload_hash,
                 indent: 0,
             })
         }
@@ -537,11 +547,15 @@ mod detail {
             let current_meta_events = self.meta_elections.current_meta_events();
             for event_index in self.peer_list.peer_events(peer_id) {
                 if let Some(event) = self.gossip_graph.get(event_index) {
-                    let attr = EventAttributes::new(
-                        event.inner(),
-                        current_meta_events.get(&event_index),
-                        &self.observations,
-                    );
+                    let attr = {
+                        let decisions = self.get_decisions(event_index, event.inner());
+                        EventAttributes::new(
+                            event.inner(),
+                            current_meta_events.get(&event_index),
+                            decisions,
+                            &self.observations,
+                        )
+                    };
                     self.writeln(format_args!(
                         "  \"{}\" {}",
                         event.short_name(),
@@ -552,6 +566,49 @@ mod detail {
                 }
             }
             Ok(())
+        }
+
+        fn get_decisions(
+            &self,
+            event_index: EventIndex,
+            event: &Event<T, S::PublicId>,
+        ) -> Vec<&Observation<T, S::PublicId>> {
+            let mut result = vec![];
+            for election in self.meta_elections.all() {
+                if let Some(meta_event) = self.meta_elections.meta_event(election, event_index) {
+                    let parent_meta_event = event
+                        .self_parent()
+                        .and_then(|parent| self.meta_elections.meta_event(election, parent));
+
+                    // if the event has all decisions and its parent does not, it is the deciding
+                    // event and we colour it green
+                    // We need to check if there are more than 0 meta_votes, as `all()` returns
+                    // true if there are no elements in the iterator
+                    if meta_event.meta_votes.len() > 0
+                        && meta_event
+                            .meta_votes
+                            .values()
+                            .all(|mvs| mvs.last().and_then(|mv| mv.decision).is_some())
+                        && parent_meta_event
+                            .map(|mev| {
+                                mev.meta_votes
+                                    .values()
+                                    .any(|mvs| mvs.last().and_then(|mv| mv.decision).is_none())
+                            }).unwrap_or(true)
+                    {
+                        let payload_hash = if election == MetaElectionHandle::CURRENT {
+                            self.payload_hash
+                        } else {
+                            self.meta_elections.decided_payload_hash(election)
+                        };
+                        let payload = payload_hash.and_then(|hash| self.observations.get(hash));
+                        if let Some(payload) = payload {
+                            result.push(*payload);
+                        }
+                    }
+                }
+            }
+            result
         }
 
         fn write_meta_elections(&mut self) -> io::Result<()> {
@@ -764,6 +821,7 @@ mod detail {
         fn new<T: NetworkEvent, P: PublicId>(
             event: &Event<T, P>,
             opt_meta_event: Option<&MetaEvent<P>>,
+            decisions: Vec<&Observation<T, P>>,
             observations_map: &BTreeMap<&ObservationHash, &Observation<T, P>>,
         ) -> Self {
             let mut attr = EventAttributes {
@@ -788,6 +846,14 @@ mod detail {
                 attr.is_rectangle = true;
             }
 
+            if !decisions.is_empty() {
+                attr.label = format!(
+                    "{}<tr><td colspan=\"6\">Decided: {:?}</td></tr>\n",
+                    attr.label, decisions
+                );
+                attr.is_rectangle = true;
+            }
+
             if let Some(meta_event) = opt_meta_event {
                 if !meta_event.interesting_content.is_empty() {
                     let interesting_content = meta_event
@@ -806,7 +872,12 @@ mod detail {
                     let meta_votes = dump_meta_votes(&meta_event.meta_votes, false).join("\n");
                     attr.label = format!("{}{}", attr.label, meta_votes);
                 }
+
                 attr.is_rectangle = true;
+            }
+
+            if !decisions.is_empty() {
+                attr.fillcolor = "style=filled, fillcolor=green";
             }
 
             attr.label = format!("{}</table>", attr.label);
