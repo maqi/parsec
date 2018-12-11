@@ -12,7 +12,7 @@ use std::iter;
 
 // This is used to collect the meta votes of other events relating to a single (binary) meta vote at
 // a given round and step.
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 pub(crate) struct MetaVoteCounts {
     pub estimates_true: usize,
     pub estimates_false: usize,

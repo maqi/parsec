@@ -80,4 +80,8 @@ impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
     pub fn finish(self) -> MetaEvent<P> {
         self.meta_event
     }
+
+    pub fn meta_event(&self) -> &MetaEvent<P> {
+        &self.meta_event
+    }
 }

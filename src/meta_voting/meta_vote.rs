@@ -80,6 +80,74 @@ impl MetaVote {
         Self::next(&[initial], others, &BTreeMap::new(), total_peers)
     }
 
+    pub fn new_print(
+        initial_estimate: bool,
+        others: &[Vec<MetaVote>],
+        total_peers: usize,
+    ) -> Vec<Self> {
+        let mut initial = Self::default();
+        initial.estimates = BoolSet::from_bool(initial_estimate);
+        Self::next_print(&[initial], others, &BTreeMap::new(), total_peers)
+    }
+
+    pub fn next_print(
+        parent: &[MetaVote],
+        others: &[Vec<MetaVote>],
+        coin_tosses: &BTreeMap<usize, bool>,
+        total_peers: usize,
+    ) -> Vec<Self> {
+        let mut next = Vec::new();
+        for vote in parent {
+            let counts = MetaVoteCounts::new(vote, others, total_peers);
+            let updated = Self::update_meta_vote(vote, counts, &coin_tosses);
+            let decided = updated.decision.is_some();
+            next.push(updated);
+            if decided {
+                break;
+            }
+        }
+        println!("total_peers {:?} next {:?}", total_peers, next);
+
+        while let Some(next_meta_vote) =
+            Self::next_meta_vote_print(next.last(), others, &coin_tosses, total_peers)
+        {
+            let counts = MetaVoteCounts::new(&next_meta_vote, others, total_peers);
+            let updated = Self::update_meta_vote(&next_meta_vote, counts.clone(), &coin_tosses);
+            println!("counts {:?} updated: {:?}", counts, updated);
+            next.push(updated);
+        }
+
+        // while let Some(next_meta_vote) =
+        //     Self::next_meta_vote_print(next.last(), others, &coin_tosses, total_peers)
+        // {
+        //     next.push(next_meta_vote);
+        // }
+        next
+    }
+
+    fn next_meta_vote_print(
+        parent: Option<&MetaVote>,
+        others: &[Vec<MetaVote>],
+        coin_tosses: &BTreeMap<usize, bool>,
+        total_peers: usize,
+    ) -> Option<MetaVote> {
+        parent.and_then(|parent| {
+            if parent.decision.is_some() {
+                return None;
+            }
+            let counts = MetaVoteCounts::new(parent, others, total_peers);
+            // println!("counts {:?}", counts);
+            if counts.is_supermajority(counts.aux_values_set()) {
+                let coin_toss = coin_tosses.get(&parent.round);
+                let mut next = parent.clone();
+                Self::increase_step(&mut next, &counts, coin_toss.cloned());
+                Some(next)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn next(
         parent: &[MetaVote],
         others: &[Vec<MetaVote>],

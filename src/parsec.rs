@@ -681,7 +681,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .iter()
                 .map(|(key, info)| (key.hash(), &info.observation))
                 .collect(),
-            Some(payload_hash),
+            Some(payload_key.hash()),
         );
 
         let payload = self
@@ -844,7 +844,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.set_observees(&mut builder);
             self.set_meta_votes(&mut builder)?;
 
-            (builder.finish(), event.creator().clone())
+            let result = builder.finish();
+
+            if event.short_name() == "E_1" || event.short_name() == "E_2" {
+                println!("{:?} : final result {:?}", event.short_name(), result);
+            }
+
+            (result, event.creator().clone())
         };
 
         self.meta_elections
@@ -1097,10 +1103,29 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 );
                 let initial_estimate = builder.has_observee(peer_id);
 
-                builder.add_meta_votes(
-                    peer_id.clone(),
-                    MetaVote::new(initial_estimate, &other_votes, voters.len()),
-                );
+                if builder.event().short_name() == "E_1" {
+                    println!(
+                        "set_meta_votes  --- peer_id {:?} \n ori meta_event: {:?} \n\n other_votes {:?} ",
+                        peer_id, builder.meta_event(), other_votes
+                    );
+                    builder.add_meta_votes(
+                        peer_id.clone(),
+                        MetaVote::new_print(initial_estimate, &other_votes, voters.len()),
+                    );
+                } else {
+                    builder.add_meta_votes(
+                        peer_id.clone(),
+                        MetaVote::new(initial_estimate, &other_votes, voters.len()),
+                    );
+                }
+
+                if builder.event().short_name() == "E_1" {
+                    println!(
+                        "set_meta_votes  --- peer_id {:?} \n after meta_event: {:?} ",
+                        peer_id,
+                        builder.meta_event()
+                    );
+                }
             }
         };
 
@@ -1399,11 +1424,23 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         election: MetaElectionHandle,
         event_index: EventIndex,
     ) -> Option<ObservationKey<S::PublicId>> {
+        let event = if let Ok(event) = self.get_known_event(event_index) {
+            event
+        } else {
+            return None;
+        };
         let last_meta_votes = self.meta_elections.meta_votes(election, event_index)?;
 
         let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
             event_votes.last().and_then(|v| v.decision).map(|v| (id, v))
         });
+
+        if event.short_name() == "E_1" || event.short_name() == "E_2" {
+            println!(
+                "compute_consensus event {:?} last_meta_votes {:?} decided_meta_votes {:?}",
+                event, last_meta_votes, decided_meta_votes
+            );
+        }
 
         if decided_meta_votes.clone().count() < self.voter_count(election) {
             return None;

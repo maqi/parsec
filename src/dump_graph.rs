@@ -552,7 +552,7 @@ mod detail {
                         EventAttributes::new(
                             event.inner(),
                             current_meta_events.get(&event_index),
-                            decisions,
+                            &decisions,
                             &self.observations,
                         )
                     };
@@ -584,7 +584,7 @@ mod detail {
                     // event and we colour it green
                     // We need to check if there are more than 0 meta_votes, as `all()` returns
                     // true if there are no elements in the iterator
-                    if meta_event.meta_votes.len() > 0
+                    if !meta_event.meta_votes.is_empty()
                         && meta_event
                             .meta_votes
                             .values()
@@ -599,7 +599,9 @@ mod detail {
                         let payload_hash = if election == MetaElectionHandle::CURRENT {
                             self.payload_hash
                         } else {
-                            self.meta_elections.decided_payload_hash(election)
+                            self.meta_elections
+                                .decided_payload_key(election)
+                                .and_then(|payload_key| Some(payload_key.hash()))
                         };
                         let payload = payload_hash.and_then(|hash| self.observations.get(hash));
                         if let Some(payload) = payload {
@@ -821,7 +823,7 @@ mod detail {
         fn new<T: NetworkEvent, P: PublicId>(
             event: &Event<T, P>,
             opt_meta_event: Option<&MetaEvent<P>>,
-            decisions: Vec<&Observation<T, P>>,
+            decisions: &[&Observation<T, P>],
             observations_map: &BTreeMap<&ObservationHash, &Observation<T, P>>,
         ) -> Self {
             let mut attr = EventAttributes {

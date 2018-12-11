@@ -255,7 +255,13 @@ fn add_few_peers_and_vote() {
     use parsec::dev_utils::ObservationEvent::*;
 
     let mut names = NAMES.iter();
-    let mut env = Environment::new(SEED);
+
+    // let mut env = Environment::new(SEED);
+    // println!("{:?}", env.rng);
+
+    let mut env = Environment::new(RngChoice::Seeded([
+        3311410757, 2121150124, 1573080275, 358040722,
+    ]));
 
     let obs_schedule = ObservationSchedule {
         genesis: names.by_ref().take(4).cloned().map(PeerId::new).collect(),
