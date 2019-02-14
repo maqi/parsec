@@ -11,7 +11,7 @@ use crate::block::Block;
 use crate::dev_utils::ParsedContents;
 use crate::dump_graph;
 use crate::error::{Error, Result};
-#[cfg(all(test, feature = "mock"))]
+// #[cfg(all(test, feature = "mock"))]
 use crate::gossip::EventHash;
 #[cfg(all(test, feature = "testing"))]
 use crate::gossip::GraphSnapshot;
@@ -1461,10 +1461,33 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
+    fn create_accusation_event_hash(
+        &mut self,
+        offender: PeerIndex,
+        malice: Malice<T, S::PublicId>,
+    ) -> Result<EventHash> {
+        let offender = self.peer_list.get_known(offender)?.id().clone();
+        let event = self.new_event_from_observation(
+            self.our_last_event_index()?,
+            Observation::Accusation { offender, malice },
+        )?;
+        let hash = *event.hash();
+        let _ = self.add_event(event)?;
+        Ok(hash)
+    }
+
     fn create_accusation_events(&mut self) -> Result<()> {
         let pending_accusations = mem::replace(&mut self.pending_accusations, vec![]);
+        println!("got {:?} pending_accusations", pending_accusations.len());
         for (offender, malice) in pending_accusations {
-            self.create_accusation_event(offender, malice)?;
+            print!(
+                "{:?} accused {:?} of {:?} ",
+                self.our_pub_id(),
+                unwrap!(self.peer_list.get(offender)).id(),
+                malice
+            );
+            let hash = self.create_accusation_event_hash(offender, malice)?;
+            println!("  with created event {:?} ", hash);
         }
 
         Ok(())
@@ -1954,17 +1977,43 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
 
         let starting_index = self.peer_list.accomplice_event_checkpoint_by(creator);
+        // let starting_index = self
+        //     .peer_list
+        //     .accomplice_event_checkpoint_by(PeerIndex::OUR);
+
+        println!(
+            "{:?} 's current accomplice_event_checkpoint is {:?} for dectecting accomplice event {:?}",
+            self.our_pub_id(),
+            starting_index,
+            event_hash
+        );
+        println!("pending_accusations are {:?}", self.pending_accusations);
         for (_, malice) in self.detect_accomplice_for_our_accusations(event, starting_index)? {
+            println!("accusing {:?}", malice);
             self.accuse(creator, Malice::Accomplice(event_hash, Box::new(malice)));
         }
 
         // Updating the event checkpoint for the next event when it will be used as starting index,
         // purely as an optimisation
         let last_malice_event_accused_by_peer = self
+            // .accusations_by_peer_since(creator, None)
             .accusations_by_peer_since(creator, starting_index)
             .iter()
             .filter_map(|(_, malice)| malice.single_hash().and_then(|h| self.graph.get_index(&h)))
             .max_by_key(|event_index| event_index.topological_index());
+        // if starting_index.is_some() {
+        //     println!(
+        //         "starting_index {:?} last_malice_event_accused_by_peer {:?}",
+        //         starting_index, last_malice_event_accused_by_peer
+        //     );
+        //     // assert_eq!(starting_index, last_malice_event_accused_by_peer);
+        // }
+        // println!(
+        //     "{:?} shall update  accomplice_event_checkpoint of {:?} to {:?}",
+        //     self.our_pub_id(),
+        //     creator,
+        //     last_malice_event_accused_by_peer
+        // );
         if let Some(index) = last_malice_event_accused_by_peer {
             self.peer_list
                 .update_accomplice_event_checkpoint_by(creator, index);
@@ -1983,6 +2032,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let accusations_by_peer_since_starter_event =
             self.accusations_by_peer_since(creator, starting_event);
 
+        println!("our_accusations are {:?}", our_accusations);
+        println!(
+            "accusations_by_peer_since_starter_event are {:?}",
+            accusations_by_peer_since_starter_event
+        );
+
         Ok(self
             .pending_accusations
             .iter()
@@ -1994,8 +2049,45 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .iter()
                     .any(|(off, mal)| (off, mal) == (offender, &malice))
             })
+            .filter(|(_, malice)| {
+                !self.pending_accusations.iter().any(|(off, mal)| match mal {
+                    Malice::Accomplice(_, ori_mal) => off == &creator && &**ori_mal == malice,
+                    _ => false,
+                })
+            })
             .cloned()
             .collect())
+
+        // Ok(self
+        //     .pending_accusations
+        //     .iter()
+        //     .chain(our_accusations.iter())
+        //     .filter(|(offender, _)| offender != &creator)
+        //     .filter(|(_, malice)| {
+        //         // let is_accomplice_ancestor = match malice {
+        //         //     Malice::Accomplice(_, ori_malice) => {
+        //         //         self.malicious_event_is_ancestor_of_this_event(&ori_malice, event)
+        //         //     }
+        //         //     _ => false,
+        //         // };
+        //         self.malicious_event_is_ancestor_of_this_event(&malice, event)
+        //         // || is_accomplice_ancestor
+        //     })
+        //     .filter(|(offender, malice)| {
+        //         !accusations_by_peer_since_starter_event
+        //             .iter()
+        //             .any(|(off, mal)| {
+        //                 let is_ori = match malice {
+        //                     Malice::Accomplice(_, ori_mal) => {
+        //                         off == offender && ori_mal == &Box::new(mal.clone())
+        //                     }
+        //                     _ => false,
+        //                 };
+        //                 (off, mal) == (offender, &malice) || is_ori
+        //             })
+        //     })
+        //     .cloned()
+        //     .collect())
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {

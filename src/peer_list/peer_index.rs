@@ -19,7 +19,7 @@ impl PeerIndex {
 
     #[cfg(any(test, feature = "testing"))]
     pub fn new_test_peer_index(index: usize) -> Self {
-        Self(index)
+        PeerIndex(index)
     }
 }
 

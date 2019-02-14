@@ -129,155 +129,168 @@ fn main() {
     // Define scenarios here:
 
     let _ = scenarios
-        .add("functional_tests::remove_peer", |env| {
-            let obs = ObservationSchedule {
-                genesis: peer_ids!("Alice", "Bob", "Carol", "Dave", "Eric"),
-                schedule: vec![(1, RemovePeer(PeerId::new("Eric")))],
-            };
-
-            Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
-        })
-        .seed([1048220270, 1673192006, 3171321266, 2580820785]);
-
-    let _ = scenarios.add(
-        "functional_tests::handle_malice_genesis_event_not_after_initial",
-        |env| {
-            let obs = ObservationSchedule {
-                genesis: peer_ids!("Alice", "Bob", "Carol", "Dave"),
-                schedule: vec![
-                    (0, Fail(PeerId::new("Dave"))),
-                    (50, Opaque(Transaction::new("ABCD"))),
-                ],
-            };
-
-            Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
-        },
-    );
-
-    let _ = scenarios
-        .add(
-            "functional_tests::handle_malice_genesis_event_creator_not_genesis_member",
-            |env| {
-                let obs = ObservationSchedule {
-                    genesis: peer_ids!("Alice", "Bob", "Carol", "Dave"),
-                    schedule: vec![(0, AddPeer(PeerId::new("Eric")))],
-                };
-
-                Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
-            },
-        )
-        .seed([848911612, 2362592349, 3178199135, 2458552022]);
-
-    let _ = scenarios
-        .add(
-            "parsec::functional_tests::handle_malice_accomplice",
-            |env| {
-                Schedule::new(
-                    env,
-                    &ScheduleOptions {
-                        genesis_size: 4,
-                        opaque_to_add: 1,
-                        ..Default::default()
-                    },
-                )
-            },
-        )
-        .file("Alice", "alice.dot")
-        .file("Bob", "bob.dot")
-        .file("Carol", "carol.dot");
-
-    let _ = scenarios
-        .add("dev_utils::record::tests::smoke_other_peer_names", |env| {
-            let obs = ObservationSchedule {
-                genesis: peer_ids!("Annie", "Bill", "Claire", "Dan"),
-                schedule: vec![(0, Opaque(Transaction::new("1")))],
-            };
-
-            Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
-        })
-        .seed([1, 2, 3, 4])
-        .file("Annie", "annie.dot");
-
-    let _ = scenarios
-        .add("benches", |env| {
-            Schedule::new(
-                env,
-                &ScheduleOptions {
-                    genesis_size: 4,
-                    opaque_to_add: 1,
-                    ..Default::default()
-                },
-            )
-        })
-        .seed([1, 2, 3, 4])
-        .file("Alice", "minimal.dot");
-
-    let _ = scenarios
-        .add("benches", |env| {
+        .add("consensus_with_forks", |env| {
             Schedule::new(
                 env,
                 &ScheduleOptions {
                     genesis_size: 5,
-                    opaque_to_add: 5,
+                    opaque_to_add: 0,
                     ..Default::default()
                 },
             )
         })
-        .seed([1, 2, 3, 4])
-        .file("Alice", "static.dot");
+        .seed([3_138_683_280, 3_174_364_583, 1_286_743_511, 1_450_990_187]);
 
-    let _ = scenarios
-        .add("benches", |env| {
-            Schedule::new(
-                env,
-                &ScheduleOptions {
-                    genesis_size: 2,
-                    peers_to_add: 3,
-                    opaque_to_add: 5,
-                    ..Default::default()
-                },
-            )
-        })
-        .seed([1, 2, 3, 4])
-        .file("Alice", "dynamic.dot");
+    // let _ = scenarios
+    //     .add("functional_tests::remove_peer", |env| {
+    //         let obs = ObservationSchedule {
+    //             genesis: peer_ids!("Alice", "Bob", "Carol", "Dave", "Eric"),
+    //             schedule: vec![(1, RemovePeer(PeerId::new("Eric")))],
+    //         };
 
-    let add_bench_scalability = |s: &mut Scenarios, opaque_to_add: usize, genesis_size: usize| {
-        let file_name_a = format!("a_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
-        let file_name_b = format!("b_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
-        let file_name_c = format!("c_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
-        let bench_name = format!("bench_section_size_evt{}", opaque_to_add);
+    //         Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
+    //     })
+    //     .seed([1048220270, 1673192006, 3171321266, 2580820785]);
 
-        let _ = s
-            .add(bench_name, move |env| {
-                Schedule::new(
-                    env,
-                    &ScheduleOptions {
-                        genesis_size,
-                        opaque_to_add,
-                        votes_before_gossip: true,
-                        ..Default::default()
-                    },
-                )
-            })
-            .seed([1, 2, 3, 4])
-            .file("Alice", &file_name_a)
-            .file("Bob", &file_name_b)
-            .file("Carol", &file_name_c);
-    };
+    // let _ = scenarios.add(
+    //     "functional_tests::handle_malice_genesis_event_not_after_initial",
+    //     |env| {
+    //         let obs = ObservationSchedule {
+    //             genesis: peer_ids!("Alice", "Bob", "Carol", "Dave"),
+    //             schedule: vec![
+    //                 (0, Fail(PeerId::new("Dave"))),
+    //                 (50, Opaque(Transaction::new("ABCD"))),
+    //             ],
+    //         };
 
-    add_bench_scalability(&mut scenarios, 8, 4);
-    add_bench_scalability(&mut scenarios, 8, 8);
-    add_bench_scalability(&mut scenarios, 8, 12);
-    add_bench_scalability(&mut scenarios, 8, 16);
-    add_bench_scalability(&mut scenarios, 8, 24);
-    add_bench_scalability(&mut scenarios, 8, 32);
+    //         Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
+    //     },
+    // );
 
-    add_bench_scalability(&mut scenarios, 16, 4);
-    add_bench_scalability(&mut scenarios, 16, 8);
-    add_bench_scalability(&mut scenarios, 16, 12);
-    add_bench_scalability(&mut scenarios, 16, 16);
-    add_bench_scalability(&mut scenarios, 16, 24);
-    add_bench_scalability(&mut scenarios, 16, 32);
+    // let _ = scenarios
+    //     .add(
+    //         "functional_tests::handle_malice_genesis_event_creator_not_genesis_member",
+    //         |env| {
+    //             let obs = ObservationSchedule {
+    //                 genesis: peer_ids!("Alice", "Bob", "Carol", "Dave"),
+    //                 schedule: vec![(0, AddPeer(PeerId::new("Eric")))],
+    //             };
+
+    //             Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
+    //         },
+    //     )
+    //     .seed([848911612, 2362592349, 3178199135, 2458552022]);
+
+    // let _ = scenarios
+    //     .add(
+    //         "parsec::functional_tests::handle_malice_accomplice",
+    //         |env| {
+    //             Schedule::new(
+    //                 env,
+    //                 &ScheduleOptions {
+    //                     genesis_size: 4,
+    //                     opaque_to_add: 1,
+    //                     ..Default::default()
+    //                 },
+    //             )
+    //         },
+    //     )
+    //     .file("Alice", "alice.dot")
+    //     .file("Bob", "bob.dot")
+    //     .file("Carol", "carol.dot");
+
+    // let _ = scenarios
+    //     .add("dev_utils::record::tests::smoke_other_peer_names", |env| {
+    //         let obs = ObservationSchedule {
+    //             genesis: peer_ids!("Annie", "Bill", "Claire", "Dan"),
+    //             schedule: vec![(0, Opaque(Transaction::new("1")))],
+    //         };
+
+    //         Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
+    //     })
+    //     .seed([1, 2, 3, 4])
+    //     .file("Annie", "annie.dot");
+
+    // let _ = scenarios
+    //     .add("benches", |env| {
+    //         Schedule::new(
+    //             env,
+    //             &ScheduleOptions {
+    //                 genesis_size: 4,
+    //                 opaque_to_add: 1,
+    //                 ..Default::default()
+    //             },
+    //         )
+    //     })
+    //     .seed([1, 2, 3, 4])
+    //     .file("Alice", "minimal.dot");
+
+    // let _ = scenarios
+    //     .add("benches", |env| {
+    //         Schedule::new(
+    //             env,
+    //             &ScheduleOptions {
+    //                 genesis_size: 5,
+    //                 opaque_to_add: 5,
+    //                 ..Default::default()
+    //             },
+    //         )
+    //     })
+    //     .seed([1, 2, 3, 4])
+    //     .file("Alice", "static.dot");
+
+    // let _ = scenarios
+    //     .add("benches", |env| {
+    //         Schedule::new(
+    //             env,
+    //             &ScheduleOptions {
+    //                 genesis_size: 2,
+    //                 peers_to_add: 3,
+    //                 opaque_to_add: 5,
+    //                 ..Default::default()
+    //             },
+    //         )
+    //     })
+    //     .seed([1, 2, 3, 4])
+    //     .file("Alice", "dynamic.dot");
+
+    // let add_bench_scalability = |s: &mut Scenarios, opaque_to_add: usize, genesis_size: usize| {
+    //     let file_name_a = format!("a_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
+    //     let file_name_b = format!("b_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
+    //     let file_name_c = format!("c_node{}_opaque_evt{}.dot", genesis_size, opaque_to_add);
+    //     let bench_name = format!("bench_section_size_evt{}", opaque_to_add);
+
+    //     let _ = s
+    //         .add(bench_name, move |env| {
+    //             Schedule::new(
+    //                 env,
+    //                 &ScheduleOptions {
+    //                     genesis_size,
+    //                     opaque_to_add,
+    //                     votes_before_gossip: true,
+    //                     ..Default::default()
+    //                 },
+    //             )
+    //         })
+    //         .seed([1, 2, 3, 4])
+    //         .file("Alice", &file_name_a)
+    //         .file("Bob", &file_name_b)
+    //         .file("Carol", &file_name_c);
+    // };
+
+    // add_bench_scalability(&mut scenarios, 8, 4);
+    // add_bench_scalability(&mut scenarios, 8, 8);
+    // add_bench_scalability(&mut scenarios, 8, 12);
+    // add_bench_scalability(&mut scenarios, 8, 16);
+    // add_bench_scalability(&mut scenarios, 8, 24);
+    // add_bench_scalability(&mut scenarios, 8, 32);
+
+    // add_bench_scalability(&mut scenarios, 16, 4);
+    // add_bench_scalability(&mut scenarios, 16, 8);
+    // add_bench_scalability(&mut scenarios, 16, 12);
+    // add_bench_scalability(&mut scenarios, 16, 16);
+    // add_bench_scalability(&mut scenarios, 16, 24);
+    // add_bench_scalability(&mut scenarios, 16, 32);
 
     // Do not edit below this line.
     // -------------------------------------------------------------------------

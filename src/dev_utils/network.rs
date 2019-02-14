@@ -546,11 +546,18 @@ impl Network {
                 }
             }
             ScheduleEvent::LocalStep(step) => {
+                println!("processing step {:?} ", step);
+                let stop = 47;
+                if step > stop {
+                    panic!("reached step {}", stop);
+                }
                 for peer_id in self.running_peers_ids() {
                     self.peer_mut(&peer_id).make_votes();
                     self.handle_messages(&peer_id, step);
                     self.peer_mut(&peer_id).poll_all();
-                    self.check_unexpected_accusations(&peer_id)?;
+                    if let Err(_err) = self.check_unexpected_accusations(&peer_id) {
+                        // println!("Peer {:?} find unexpected_accusations {:?}", peer_id, err);
+                    };
                 }
                 Peer::update_network_views(&mut self.peers);
                 let running_peers_ids = self.running_peers_ids();

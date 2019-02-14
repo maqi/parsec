@@ -180,26 +180,6 @@ mod tests {
         }
     }
 
-    /// Observation key with readable assertion result and creation.
-    #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
-    pub(crate) enum AssertObservationKey {
-        Single(u8, PeerIndex),
-        Supermajority(u8),
-    }
-
-    impl AssertObservationKey {
-        pub fn new_from_key(key: &ObservationKey, hashes: &[ObservationHash]) -> Self {
-            match *key {
-                ObservationKey::Single(ref hash, peer) => {
-                    AssertObservationKey::Single(find_observation_hash_index(hash, hashes), peer)
-                }
-                ObservationKey::Supermajority(ref hash) => {
-                    AssertObservationKey::Supermajority(find_observation_hash_index(hash, hashes))
-                }
-            }
-        }
-    }
-
     fn observation_hash_from_u8(value: u8) -> ObservationHash {
         ObservationHash(Hash::from(vec![value].as_slice()))
     }
@@ -211,7 +191,27 @@ mod tests {
     /// Tests for find_interesting_content_for_event.
     mod find_interesting_content_for_event {
         use super::*;
-        use AssertObservationKey::*;
+
+        /// Observation key with readable assertion result and creation.
+        #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
+        pub(crate) enum AssertObservationKey {
+            Single(u8, PeerIndex),
+            Supermajority(u8),
+        }
+
+        impl AssertObservationKey {
+            pub fn new_from_key(key: &ObservationKey, hashes: &[ObservationHash]) -> Self {
+                match *key {
+                    ObservationKey::Single(ref hash, peer) => AssertObservationKey::Single(
+                        find_observation_hash_index(hash, hashes),
+                        peer,
+                    ),
+                    ObservationKey::Supermajority(ref hash) => AssertObservationKey::Supermajority(
+                        find_observation_hash_index(hash, hashes),
+                    ),
+                }
+            }
+        }
 
         /// Data driven test configuration for test_find_interesting_content_for_event
         struct TestSimpleData {
@@ -308,7 +308,10 @@ mod tests {
                     is_interesting_payload: true,
                     has_interesting_ancestor: false,
                 },
-                expected_payloads: vec![Supermajority(1), Supermajority(2)],
+                expected_payloads: vec![
+                    AssertObservationKey::Supermajority(1),
+                    AssertObservationKey::Supermajority(2),
+                ],
             });
         }
 
@@ -353,7 +356,10 @@ mod tests {
                     is_interesting_payload: false,
                     has_interesting_ancestor: true,
                 },
-                expected_payloads: vec![Supermajority(1), Supermajority(2)],
+                expected_payloads: vec![
+                    AssertObservationKey::Supermajority(1),
+                    AssertObservationKey::Supermajority(2),
+                ],
             });
         }
     }

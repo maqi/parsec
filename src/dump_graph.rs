@@ -807,8 +807,9 @@ mod detail {
             attr.label = format!(
                 "<table border=\"0\" cellborder=\"0\" \
                  cellpadding=\"0\" cellspacing=\"0\">\n\
-                 <tr><td colspan=\"6\">{}</td></tr>\n",
-                attr.label
+                 <tr><td colspan=\"12\">{} {:?}</td></tr>\n",
+                attr.label,
+                event.hash()
             );
 
             if let Some(event_payload) = event

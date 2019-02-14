@@ -86,7 +86,7 @@ impl PeerId {
         let seed = name_hash
             .as_bytes()
             .chunks_exact(4)
-            .map(|bytes| u32::from_le_bytes(Self::make_array_of_len_4(bytes)))
+            .map(|bytes| Self::convert_to_u32(bytes))
             .collect::<Vec<_>>();
 
         let mut rng = XorShiftRng::from_seed(Self::make_array_of_len_4(&seed));
@@ -98,6 +98,11 @@ impl PeerId {
     #[cfg(feature = "mock")]
     fn make_array_of_len_4<T: Copy>(values: &[T]) -> [T; 4] {
         [values[0], values[1], values[2], values[3]]
+    }
+
+    #[cfg(feature = "mock")]
+    fn convert_to_u32<T: Copy>(_values: &[T]) -> u32 {
+        6
     }
 
     // Only being used by the dot_parser.
