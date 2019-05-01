@@ -41,7 +41,6 @@ use itertools::Itertools;
 #[cfg(any(test, feature = "testing"))]
 use std::ops::{Deref, DerefMut};
 use std::{
-    cmp,
     collections::{BTreeMap, BTreeSet, VecDeque},
     iter,
     marker::PhantomData,
@@ -1093,12 +1092,51 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 temp_votes,
             };
 
+            let mut decided = BTreeMap::new();
+            let mut undecided = BTreeMap::new();
+
             for (peer_index, temp_votes) in &context.temp_votes {
                 let coin_tosses = self.toss_coins(&voters, peer_index, temp_votes, &context)?;
                 let final_meta_votes =
                     MetaVote::next_final(temp_votes, &coin_tosses, voters.len(), is_voter);
 
-                builder.add_meta_votes(peer_index, final_meta_votes);
+                if final_meta_votes
+                    .iter()
+                    .last()
+                    .map(|vote| vote.decision.is_some())
+                    .unwrap_or_else(|| false)
+                {
+                    let _ = decided.insert(peer_index, final_meta_votes);
+                } else {
+                    let _ = undecided.insert(peer_index, final_meta_votes);
+                }
+            }
+
+            if undecided.len() == 1
+                && decided.len() == voters.len() - 1
+                && undecided
+                    .values()
+                    .last()
+                    .map(|votes| votes.len() > 3)
+                    .unwrap_or_else(|| false)
+            {
+                let decision = decided
+                    .values()
+                    .last()
+                    .map(|votes| votes.iter().last().map(|vote| vote.decision))
+                    .unwrap_or_else(|| None);
+                for (peer_index, votes) in undecided.iter() {
+                    let mut updated_votes = votes.clone();
+                    let last_index = votes.len() - 1;
+
+                    updated_votes[last_index].decision = decision.unwrap_or_else(|| None);
+                    let _ = decided.insert(*peer_index, updated_votes);
+                }
+                undecided.clear();
+            }
+
+            for (peer_index, final_meta_votes) in decided.iter().chain(undecided.iter()) {
+                builder.add_meta_votes(*peer_index, final_meta_votes.to_vec());
             }
         } else {
             // Start meta votes for this observer event.
@@ -1375,43 +1413,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             None => return Vec::new(),
         };
 
-        let mut max_votes = 0;
-        let mut undecided_votes = 0;
-        let mut decided_meta_votes: BTreeSet<(PeerIndex, bool)> = BTreeSet::new();
-        let mut undecided_peers: BTreeSet<PeerIndex> = BTreeSet::new();
-        let mut true_votes = 0;
-        let mut false_votes = 0;
+        let decided_meta_votes = last_meta_votes
+            .iter()
+            .filter_map(|(peer_index, event_votes)| {
+                event_votes
+                    .last()
+                    .and_then(|v| v.decision)
+                    .map(|v| (peer_index, v))
+            });
 
-        for (peer_index, event_votes) in last_meta_votes.iter() {
-            if let Some(v) = event_votes.last() {
-                match v.decision {
-                    None => {
-                        let _ = undecided_peers.insert(peer_index);
-                        undecided_votes = event_votes.len();
-                    }
-                    Some(v) => {
-                        max_votes = cmp::max(max_votes, event_votes.len());
-                        if v {
-                            true_votes += 1;
-                        } else {
-                            false_votes += 1;
-                        }
-                        let _ = decided_meta_votes.insert((peer_index, v));
-                    }
-                }
-            }
-        }
-
-        if undecided_peers.len() == 1 {
-            let factor = if true_votes == false_votes { 4 } else { 2 };
-            if undecided_votes > factor * max_votes {
-                if let Some(undecided_peer) = undecided_peers.iter().last() {
-                    let _ = decided_meta_votes.insert((*undecided_peer, true_votes >= false_votes));
-                }
-            }
-        }
-
-        if decided_meta_votes.len() < self.voter_count() {
+        if decided_meta_votes.clone().count() < self.voter_count() {
             return Vec::new();
         }
 
