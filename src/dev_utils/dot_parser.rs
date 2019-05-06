@@ -703,18 +703,14 @@ fn parse_meta_vote() -> Parser<u8, MetaVote> {
         + parse_opt_bool()
         - spaces()
         + parse_opt_bool())
-    .map(|(((((round, step), est), bin), aux), dec)| MetaVote {
-        round,
-        step: match step {
+    .map(|(((((round, step), est), bin), aux), dec)| {
+        let step = match step {
             0 => Step::ForcedTrue,
             1 => Step::ForcedFalse,
             2 => Step::GenuineFlip,
             _ => unreachable!(),
-        },
-        estimates: est,
-        bin_values: bin,
-        aux_value: aux,
-        decision: dec,
+        };
+        MetaVote::new(round, step, est, bin, aux, dec)
     })
 }
 

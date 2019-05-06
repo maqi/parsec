@@ -310,14 +310,6 @@ mod detail {
         fs::remove_dir(path)
     }
 
-    fn as_short_string(value: Option<bool>) -> &'static str {
-        match value {
-            None => "-",
-            Some(true) => "t",
-            Some(false) => "f",
-        }
-    }
-
     fn dump_meta_votes(
         short_peer_ids: &PeerIndexMap<String>,
         meta_votes: &PeerIndexMap<Vec<MetaVote>>,
@@ -347,10 +339,7 @@ mod detail {
 
             let mut prefix: &str = prefix.as_str();
             for mv in meta_votes {
-                let est = mv.estimates.as_short_string();
-                let bin = mv.bin_values.as_short_string();
-                let aux = as_short_string(mv.aux_value);
-                let dec = as_short_string(mv.decision);
+                let (est, bin, aux, dec) = mv.values.as_chars();
                 let line = if comment {
                     format!(
                         "{}{}/{:?}   {}   {}   {}   {} ",

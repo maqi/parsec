@@ -1106,7 +1106,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     let other_votes = Self::peer_meta_votes(&ancestors_meta_votes, peer_index);
                     let initial_estimate = builder.has_observee(peer_index);
 
-                    MetaVote::new(initial_estimate, &other_votes, voters.len(), is_voter)
+                    MetaVote::new_for_observer(
+                        initial_estimate,
+                        &other_votes,
+                        voters.len(),
+                        is_voter,
+                    )
                 };
 
                 builder.add_meta_votes(peer_index, new_meta_votes);
@@ -1146,7 +1151,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         context: &MetaVoteContext<S::PublicId>,
     ) -> Result<Option<bool>> {
         // Get the round hash.
-        let round = if temp_vote.estimates.is_empty() {
+        let round = if temp_vote.has_empty_estimates() {
             // We're waiting for the coin toss result already.
             if temp_vote.round == 0 {
                 if voters.contains(context.event.creator()) {
@@ -1239,7 +1244,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 continue;
             };
 
-            if meta_vote.aux_value.is_none() {
+            if !meta_vote.contains_aux_value() {
                 continue;
             }
 
@@ -1282,7 +1287,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .map_or(false, |meta_votes| {
                 meta_votes
                     .iter()
-                    .any(|meta_vote| meta_vote.round == round && meta_vote.aux_value.is_some())
+                    .any(|meta_vote| meta_vote.round == round && meta_vote.contains_aux_value())
             })
     }
 
@@ -1379,7 +1384,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .filter_map(|(peer_index, event_votes)| {
                 event_votes
                     .last()
-                    .and_then(|v| v.decision)
+                    .and_then(MetaVote::decision)
                     .map(|v| (peer_index, v))
             });
 

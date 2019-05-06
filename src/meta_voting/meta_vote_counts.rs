@@ -8,6 +8,7 @@
 
 use super::meta_vote::MetaVote;
 use crate::observation::is_more_than_two_thirds;
+use std::ops::AddAssign;
 
 // This is used to collect the meta votes of other events relating to a single (binary) meta vote at
 // a given round and step.
@@ -21,6 +22,18 @@ pub(crate) struct MetaVoteCounts {
     pub aux_values_false: usize,
     pub decision: Option<bool>,
     pub total_peers: usize,
+}
+
+impl AddAssign for MetaVoteCounts {
+    fn add_assign(&mut self, other: MetaVoteCounts) {
+        self.estimates_true += other.estimates_true;
+        self.estimates_false += other.estimates_false;
+        self.bin_values_true += other.bin_values_true;
+        self.bin_values_false += other.bin_values_false;
+        self.aux_values_true += other.aux_values_true;
+        self.aux_values_false += other.aux_values_false;
+        self.decision = self.decision.or(other.decision);
+    }
 }
 
 impl MetaVoteCounts {
@@ -45,27 +58,8 @@ impl MetaVoteCounts {
             })
             .chain(if is_voter { Some(parent) } else { None })
         {
-            if vote.estimates.contains(true) {
-                counts.estimates_true += 1;
-            }
-            if vote.estimates.contains(false) {
-                counts.estimates_false += 1;
-            }
-            if vote.bin_values.contains(true) {
-                counts.bin_values_true += 1;
-            }
-            if vote.bin_values.contains(false) {
-                counts.bin_values_false += 1;
-            }
-            match vote.aux_value {
-                Some(true) => counts.aux_values_true += 1,
-                Some(false) => counts.aux_values_false += 1,
-                None => (),
-            }
-
-            if counts.decision.is_none() {
-                counts.decision = vote.decision;
-            }
+            let contribution = vote.values.count();
+            counts += contribution;
         }
         counts
     }
