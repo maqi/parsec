@@ -49,7 +49,7 @@ pub struct Network {
 #[derive(Debug)]
 pub struct BlocksOrder {
     peer: PeerId,
-    order: Vec<Observation>,
+    order: Vec<(Observation, Option<PeerId>)>,
 }
 
 pub struct DifferingBlocksOrder {
@@ -73,7 +73,15 @@ impl fmt::Debug for DifferingBlocksOrder {
             .zip(self.order_2.order.iter())
             .enumerate()
         {
-            writeln!(formatter, "  {}. {:?} / {:?}", i + 1, block1, block2)?;
+            writeln!(
+                formatter,
+                "  {}. ({:?}-{:?}) / ({:?}-{:?})",
+                i + 1,
+                block1.1,
+                block1.0,
+                block2.1,
+                block2.0
+            )?;
         }
         write!(formatter, "}}")
     }
@@ -170,14 +178,19 @@ impl Network {
             .running_non_malicious_peers()
             .find(|peer| peer.blocks_payloads() != payloads)
         {
+            let order_1 = first_peer
+                .blocks()
+                .map(|block| self.block_key(block))
+                .collect();
+            let order_2 = peer.blocks().map(|block| self.block_key(block)).collect();
             Err(ConsensusError::DifferingBlocksOrder(DifferingBlocksOrder {
                 order_1: BlocksOrder {
                     peer: first_peer.id().clone(),
-                    order: payloads.into_iter().cloned().collect(),
+                    order: order_1,
                 },
                 order_2: BlocksOrder {
                     peer: peer.id().clone(),
-                    order: peer.blocks_payloads().into_iter().cloned().collect(),
+                    order: order_2,
                 },
             }))
         } else {
@@ -302,15 +315,20 @@ impl Network {
 
                 if let Some((old_peer, old_index)) = block_order.insert(key, (peer, index)) {
                     if old_index != index {
+                        let order = peer.blocks().map(|block| self.block_key(block)).collect();
+                        let old_order = old_peer
+                            .blocks()
+                            .map(|block| self.block_key(block))
+                            .collect();
                         // old index exists and isn't equal to the new one
                         return Err(ConsensusError::DifferingBlocksOrder(DifferingBlocksOrder {
                             order_1: BlocksOrder {
                                 peer: peer.id().clone(),
-                                order: peer.blocks_payloads().into_iter().cloned().collect(),
+                                order: order,
                             },
                             order_2: BlocksOrder {
                                 peer: old_peer.id().clone(),
-                                order: old_peer.blocks_payloads().into_iter().cloned().collect(),
+                                order: old_order,
                             },
                         }));
                     }
@@ -320,13 +338,10 @@ impl Network {
         Ok(())
     }
 
-    fn block_key<'a>(
-        &self,
-        block: &'a Block<Transaction, PeerId>,
-    ) -> (&'a Observation, Option<&'a PeerId>) {
+    fn block_key(&self, block: &Block<Transaction, PeerId>) -> (Observation, Option<PeerId>) {
         let peer_id = if block.payload().is_opaque() {
             if self.consensus_mode == ConsensusMode::Single {
-                Some(&unwrap!(block.proofs().iter().next()).public_id)
+                Some(unwrap!(block.proofs().iter().next()).public_id.clone())
             } else {
                 None
             }
@@ -334,7 +349,7 @@ impl Network {
             None
         };
 
-        (block.payload(), peer_id)
+        (block.payload().clone(), peer_id)
     }
 
     fn consensus_complete(

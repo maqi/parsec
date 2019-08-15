@@ -280,6 +280,8 @@ pub struct ScheduleOptions {
     pub intermediate_consistency_checks: bool,
     /// The only genesis members that will compute consensus if provided. All if none.
     pub genesis_restrict_consensus_to: Option<BTreeSet<PeerId>>,
+    /// Allows for voting for the same OpaquePayload
+    pub vote_for_same: bool,
 }
 
 impl ScheduleOptions {
@@ -337,6 +339,7 @@ impl Default for ScheduleOptions {
             transparent_voters: Sampling::Fraction(1.0, 1.0),
             intermediate_consistency_checks: true,
             genesis_restrict_consensus_to: None,
+            vote_for_same: false,
         }
     }
 }
@@ -398,17 +401,35 @@ impl ObservationSchedule {
             .collect();
         let mut peers = PeerStatuses::new(&genesis_ids);
 
+        let mut duplicated = 0;
+
+        let allowed_to_same = if options.vote_for_same {
+            options.genesis_size - 1
+        } else {
+            0
+        };
+
         let mut step: usize = 1;
         while num_observations
-            < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
+            < options.opaque_to_add
+                + options.peers_to_add
+                + options.peers_to_remove
+                + allowed_to_same
         {
-            if opaque_count < options.opaque_to_add && rng.gen::<f64>() < options.prob_opaque {
+            if opaque_count < options.opaque_to_add
+                && duplicated <= allowed_to_same
+                && rng.gen::<f64>() < options.prob_opaque
+            {
                 schedule.push((
                     step,
                     ObservationEvent::Opaque(Transaction::new(opaque_count.to_string())),
                 ));
                 num_observations += 1;
-                opaque_count += 1;
+                if options.vote_for_same {
+                    duplicated += 1;
+                } else {
+                    opaque_count += 1;
+                }
             }
             if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
                 let next_id = PeerId::new(&unwrap!(names_iter.next()));
