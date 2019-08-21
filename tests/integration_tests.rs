@@ -650,6 +650,7 @@ fn consensus_mode_single_all_vote_same() {
         opaque_to_add: 1,
         opaque_voters: Sampling::Constant(8),
         vote_for_same: true,
+        choose_all: true,
         ..Default::default()
     };
     let schedule = Schedule::new(&mut env, &options);

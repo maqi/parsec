@@ -157,6 +157,7 @@ pub struct PendingObservations {
     p_delay: f64,
     queues: BTreeMap<PeerId, BTreeMap<usize, Vec<Observation>>>,
     opaque_vote_counts: BTreeMap<PeerId, usize>,
+    choose_all: bool,
 }
 
 impl PendingObservations {
@@ -167,6 +168,7 @@ impl PendingObservations {
             p_delay: opts.p_observation_delay,
             queues: BTreeMap::new(),
             opaque_vote_counts: BTreeMap::new(),
+            choose_all: opts.choose_all,
         }
     }
 
@@ -180,7 +182,7 @@ impl PendingObservations {
         observation: &Observation,
     ) {
         let peers: Vec<_> = peers.into_iter().collect();
-        let peers = sample(rng, &peers, strategy);
+        let peers = sample(rng, &peers, strategy, self.choose_all);
         for peer in peers {
             let observations = self
                 .queues
@@ -282,6 +284,8 @@ pub struct ScheduleOptions {
     pub genesis_restrict_consensus_to: Option<BTreeSet<PeerId>>,
     /// Allows for voting for the same OpaquePayload
     pub vote_for_same: bool,
+    /// Enforce all the peers are selected to vote for observation
+    pub choose_all: bool,
 }
 
 impl ScheduleOptions {
@@ -340,6 +344,7 @@ impl Default for ScheduleOptions {
             intermediate_consistency_checks: true,
             genesis_restrict_consensus_to: None,
             vote_for_same: false,
+            choose_all: false,
         }
     }
 }
@@ -821,9 +826,21 @@ pub enum Sampling {
 }
 
 /// Return a random subset of `items` according to the given sampling strategy.
-fn sample<T: Clone, R: Rng>(rng: &mut R, items: &[T], strategy: Sampling) -> Vec<T> {
+fn sample<T: Clone, R: Rng>(
+    rng: &mut R,
+    items: &[T],
+    strategy: Sampling,
+    choose_all: bool,
+) -> Vec<T> {
     let amount = match strategy {
-        Sampling::Constant(amount) => amount,
+        Sampling::Constant(amount) => {
+            // For the special case that all peers vote for the same opaqueload
+            if amount == 1 && choose_all {
+                items.len()
+            } else {
+                amount
+            }
+        }
         Sampling::Fraction(min, max) => {
             let min = (items.len() as f64 * min).ceil() as usize;
             let max = (items.len() as f64 * max).floor() as usize + 1;

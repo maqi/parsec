@@ -40,7 +40,6 @@ use crate::{
     hash::Hash,
     mock::{PeerId, Transaction},
 };
-use fnv::FnvHashSet;
 use itertools::Itertools;
 #[cfg(any(test, feature = "testing"))]
 use std::ops::{Deref, DerefMut};
@@ -1438,66 +1437,107 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     where
         I: IntoIterator<Item = (PeerIndex, bool)>,
     {
-        let mut payload_iters = decided_meta_votes
+        let payloads = decided_meta_votes
             .into_iter()
-            .filter(|(_, decision)| *decision)
-            .filter_map(|(peer_index, _)| self.meta_election.interesting_content_by(peer_index))
-            .map(|payload_keys| payload_keys.iter())
-            .collect_vec();
-
-        let mut all_payloads_in_order = Vec::new();
-        let mut all_payloads_lookup: FnvHashSet<&ObservationKey> = FnvHashSet::default();
-
-        // First, process the first payloads from each decided meta events and append the ordered result to
-        // the end of `all_payloads_in_order`. Then, skipping any payload already in `all_payloads_in_order`/
-        // `all_payloads_lookup`, process the next payloads from each decided meta events similarly.
-        while let Some(payloads_counts) = self
-            .next_payload_batch_for_consensus_with_count(&mut payload_iters, &all_payloads_lookup)
-        {
-            let new_payloads = self.sort_payload_batch_for_consensus(&payloads_counts);
-            all_payloads_in_order.extend(new_payloads.iter().cloned());
-            all_payloads_lookup.extend(new_payloads.iter());
-        }
-
-        all_payloads_in_order
-    }
-
-    // Iterate the payload iterators skipping processed payloads and accumulate this batch of payload count.
-    fn next_payload_batch_for_consensus_with_count<'a>(
-        &self,
-        payload_iters: &mut [impl Iterator<Item = &'a ObservationKey>],
-        processed_payloads: &FnvHashSet<&ObservationKey>,
-    ) -> Option<BTreeMap<&'a ObservationKey, i32>> {
-        let payloads_counts = payload_iters
-            .iter_mut()
-            .filter_map(|iter| iter.find(|key| !processed_payloads.contains(key)))
-            .fold(BTreeMap::new(), |mut map, payload_key| {
-                *map.entry(payload_key).or_insert(0) += 1;
+            .flat_map(|(peer_index, decision)| {
+                if decision {
+                    match self.meta_election.interesting_content_by(peer_index) {
+                        Some(content) => content.iter().enumerate().collect_vec(),
+                        None => Vec::new(),
+                    }
+                } else {
+                    Vec::new()
+                }
+            })
+            .fold(BTreeMap::new(), |mut map, (idx, payload_key)| {
+                let (count, min_index) = map.entry(payload_key.clone()).or_insert((0, idx));
+                *count += 1;
+                *min_index = std::cmp::min(*min_index, idx);
                 map
             });
-        if payloads_counts.is_empty() {
-            None
-        } else {
-            Some(payloads_counts)
-        }
+
+        payloads
+            .into_iter()
+            .sorted_by(
+                |(lhs_key, (lhs_count, lhs_min_index)), (rhs_key, (rhs_count, rhs_min_index))| {
+                    lhs_min_index
+                        .cmp(rhs_min_index)
+                        .then_with(|| lhs_count.cmp(rhs_count).reverse())
+                        .then_with(|| lhs_key.consistent_cmp(rhs_key, &self.peer_list))
+                },
+            )
+            .map(|(key, _)| key)
+            .collect()
+
+        // let mut payload_iters = decided_meta_votes
+        //     .into_iter()
+        //     .filter(|(_, decision)| *decision)
+        //     .filter_map(|(peer_index, _)| self.meta_election.interesting_content_by(peer_index))
+        //     .map(|payload_keys| payload_keys.iter())
+        //     .collect_vec();
+
+        // let mut all_payloads_in_order = Vec::new();
+        // let mut all_payloads_lookup: FnvHashSet<&ObservationKey> = FnvHashSet::default();
+
+        // // First, process the first payloads from each decided meta events and append the ordered result to
+        // // the end of `all_payloads_in_order`. Then, skipping any payload already in `all_payloads_in_order`/
+        // // `all_payloads_lookup`, process the next payloads from each decided meta events similarly.
+        // while let Some(payloads_counts) = self
+        //     .next_payload_batch_for_consensus_with_count(&mut payload_iters, &all_payloads_lookup)
+        // {
+        //     let new_payloads = self.sort_payload_batch_for_consensus(&payloads_counts);
+        //     all_payloads_in_order.extend(new_payloads.iter().cloned());
+        //     all_payloads_lookup.extend(new_payloads.iter());
+        // }
+
+        // all_payloads_in_order
     }
 
-    // Sort the payload batch by count, and then a consistent tie breaker.
-    fn sort_payload_batch_for_consensus<'a>(
-        &self,
-        payloads_counts: &BTreeMap<&'a ObservationKey, i32>,
-    ) -> Vec<&'a ObservationKey> {
-        payloads_counts
-            .iter()
-            .sorted_by(|(lhs_key, lhs_count), (rhs_key, rhs_count)| {
-                lhs_count
-                    .cmp(rhs_count)
-                    .reverse()
-                    .then_with(|| lhs_key.consistent_cmp(rhs_key, &self.peer_list))
-            })
-            .map(|(&key, _)| key)
-            .collect_vec()
-    }
+    // // Iterate the payload iterators skipping processed payloads and accumulate this batch of payload count.
+    // fn next_payload_batch_for_consensus_with_count<'a>(
+    //     &self,
+    //     payload_iters: &mut [impl Iterator<Item = &'a ObservationKey>],
+    //     processed_payloads: &FnvHashSet<&ObservationKey>,
+    // ) -> Option<BTreeMap<&'a ObservationKey, i32>> {
+    //     // let payloads_counts = payload_iters
+    //     //     .iter_mut()
+    //     //     .filter_map(|iter| iter.find(|key| !processed_payloads.contains(key)))
+    //     //     .fold(BTreeMap::new(), |mut map, payload_key| {
+    //     //         *map.entry(payload_key).or_insert(0) += 1;
+    //     //         map
+    //     //     });
+    //     let mut payloads_counts = BTreeMap::new();
+    //     for payload in payload_iters.iter_mut() {
+    //         payloads_counts = payload.fold(payloads_counts, |mut map, payload_key| {
+    //             if !processed_payloads.contains(payload_key) {
+    //                 *map.entry(payload_key).or_insert(0) += 1;
+    //             }
+    //             map
+    //         });
+    //     }
+    //     if payloads_counts.is_empty() {
+    //         None
+    //     } else {
+    //         Some(payloads_counts)
+    //     }
+    // }
+
+    // // Sort the payload batch by count, and then a consistent tie breaker.
+    // fn sort_payload_batch_for_consensus<'a>(
+    //     &self,
+    //     payloads_counts: &BTreeMap<&'a ObservationKey, i32>,
+    // ) -> Vec<&'a ObservationKey> {
+    //     payloads_counts
+    //         .iter()
+    //         .sorted_by(|(lhs_key, lhs_count), (rhs_key, rhs_count)| {
+    //             lhs_count
+    //                 .cmp(rhs_count)
+    //                 .reverse()
+    //                 .then_with(|| lhs_key.consistent_cmp(rhs_key, &self.peer_list))
+    //         })
+    //         .map(|(&key, _)| key)
+    //         .collect_vec()
+    // }
 
     fn create_blocks(&self, payload_keys: &[ObservationKey]) -> Result<BlockGroup<T, S::PublicId>> {
         let voters = self.voters();
