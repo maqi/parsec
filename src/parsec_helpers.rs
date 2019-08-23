@@ -8,6 +8,7 @@
 
 use crate::{gossip::AbstractEventRef, observation::ObservationKey};
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::usize;
 
 /// Find interesting payloads for the builder_event.
@@ -15,6 +16,7 @@ use std::usize;
 pub(crate) fn find_interesting_content_for_event<'a, E>(
     builder_event: E,
     unconsensused_events: impl Iterator<Item = E>,
+    consistent_cmp: impl Fn(&ObservationKey, &ObservationKey) -> Ordering,
     is_descendant: impl Fn(E, E) -> bool,
     is_already_interesting_content: impl Fn(&ObservationKey) -> bool,
     is_interesting_payload: impl Fn(&ObservationKey) -> bool,
@@ -79,7 +81,13 @@ where
 
     // Sort the payloads in the order the creator voted for them, followed by the ones
     // not voted for by the creator (if any).
-    interesting_payload_keys.sort();
+    interesting_payload_keys.sort_by(|(l_index, l_key), (r_index, r_key)| {
+        if l_index == r_index {
+            consistent_cmp(l_key, r_key)
+        } else {
+            l_index.cmp(r_index)
+        }
+    });
 
     interesting_payload_keys
         .into_iter()
@@ -93,6 +101,7 @@ mod tests {
     use super::*;
     use crate::{
         hash::Hash,
+        // mock::PeerId,
         observation::{ConsensusMode, ObservationHash},
         peer_list::PeerIndex,
     };
@@ -105,6 +114,11 @@ mod tests {
         /// Peer indexes to use in tests.
         static ref PEER_IDS: Vec<PeerIndex> =
             (0..9).map(PeerIndex::new_test_peer_index).collect();
+
+        /// Mock ids for ordering in tests.
+        static ref NAMES: Vec<u8> = vec![
+            5, 9, 6, 1, 8, 2, 3, 7, 0, 4,
+        ];
     }
 
     /// Stand in stub for Event: Implement AbstractEvent.
@@ -128,6 +142,20 @@ mod tests {
                 payload_key: payload_hash.map(|hash| {
                     ObservationKey::new(hash, peer_index, ConsensusMode::Supermajority)
                 }),
+                has_ancestors: false,
+            }
+        }
+
+        fn new_single(
+            peer_index: PeerIndex,
+            creator_index: usize,
+            payload_hash: Option<ObservationHash>,
+        ) -> Self {
+            Self {
+                peer_index,
+                creator_index,
+                payload_key: payload_hash
+                    .map(|hash| ObservationKey::new(hash, peer_index, ConsensusMode::Single)),
                 has_ancestors: false,
             }
         }
@@ -231,6 +259,23 @@ mod tests {
                     ],
                 }
             }
+
+            /// A simple setup for Events that can be used in multiple tests.
+            fn new_basic_setup_single() -> Self {
+                let opaque_1 = Some(OPAQUE_HASHES[1]);
+                let opaque_2 = Some(OPAQUE_HASHES[2]);
+                let last_event_peer = PEER_IDS[6];
+
+                Self {
+                    builder_event: TestEvent::new_single(last_event_peer, 100, None),
+                    unconsensused_events: vec![
+                        TestEvent::new_single(PEER_IDS[2], 2, opaque_1),
+                        TestEvent::new_single(PEER_IDS[8], 11, opaque_1),
+                        TestEvent::new_single(last_event_peer, 6, opaque_1),
+                        TestEvent::new_single(last_event_peer, 10, opaque_2),
+                    ],
+                }
+            }
         }
 
         /// Test function for find_interesting_content_for_event
@@ -246,6 +291,10 @@ mod tests {
             let payloads = find_interesting_content_for_event(
                 &events.builder_event,
                 events.unconsensused_events.iter(),
+                |lhs_key, rhs_key| {
+                    NAMES[unwrap!(lhs_key.peer_index()).value()]
+                        .cmp(&NAMES[unwrap!(rhs_key.peer_index()).value()])
+                },
                 |event_x, _event_y| event_x.has_ancestors,
                 |_payload_key| payload_properties.is_already_interesting_content,
                 |_payload_key| payload_properties.is_interesting_payload,
@@ -270,6 +319,24 @@ mod tests {
                     is_interesting_payload: true,
                 },
                 expected_payloads: vec![Supermajority(1), Supermajority(2)],
+            });
+        }
+
+        #[test]
+        /// Basic happy path
+        fn all_payloads_interesting_single() {
+            test_find_interesting_content_for_event(TestSimpleData {
+                events: Events::new_basic_setup_single().with_builder_event_sees_other(),
+                payload_properties: PayloadProperties {
+                    is_already_interesting_content: false,
+                    is_interesting_payload: true,
+                },
+                expected_payloads: vec![
+                    Single(1, PEER_IDS[6]),
+                    Single(2, PEER_IDS[6]),
+                    Single(1, PEER_IDS[2]),
+                    Single(1, PEER_IDS[8]),
+                ],
             });
         }
 

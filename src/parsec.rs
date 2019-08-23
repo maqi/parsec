@@ -1107,6 +1107,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let peers_that_can_vote = self.voters();
 
+        let consistent_cmp = |lhs_key: &ObservationKey, rhs_key: &ObservationKey| {
+            lhs_key.consistent_cmp(rhs_key, &self.peer_list)
+        };
+
         let is_descendant = |x: IndexedEventRef<_>, y| x.is_descendant_of(y);
 
         let is_already_interesting_content = |payload_key: &ObservationKey| {
@@ -1121,6 +1125,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let payloads = find_interesting_content_for_event(
             builder.event(),
             self.unconsensused_events(None),
+            consistent_cmp,
             is_descendant,
             is_already_interesting_content,
             is_interesting_payload,

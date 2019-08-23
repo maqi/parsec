@@ -23,6 +23,11 @@ impl PeerIndex {
     pub fn new_test_peer_index(index: usize) -> Self {
         Self(index)
     }
+
+    #[cfg(test)]
+    pub fn value(&self) -> usize {
+        self.0
+    }
 }
 
 /// Map keyed by `PeerIndex`.
