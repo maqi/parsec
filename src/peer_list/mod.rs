@@ -117,7 +117,6 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns an iterator of peers that can vote.
-    #[cfg(feature = "malice-detection")]
     pub fn voters(&self) -> impl Iterator<Item = (PeerIndex, &Peer<S::PublicId>)> {
         self.iter().filter(|(_, peer)| peer.state().can_vote())
     }

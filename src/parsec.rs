@@ -54,6 +54,51 @@ use std::{
 
 pub(crate) type KeyGenId = usize;
 
+/// Affects the threshold (number of unvoted votes) a node be considered as unresponsive.
+const UNRESPONSIVE_THRESHOLD_FRACTION: usize = 3;
+/// Affects the period (X consensued observations) after which node be considered as unresponsive.
+const UNRESPONSIVE_FACTOR: usize = 10;
+
+struct VoteStatus {
+    payload_key: ObservationKey,
+    unvoted: PeerIndexSet,
+    consensused: bool,
+}
+
+impl VoteStatus {
+    fn new(payload_key: &ObservationKey, voter: PeerIndex, all_voters: PeerIndexSet) -> Self {
+        let mut vote_status = VoteStatus {
+            payload_key: *payload_key,
+            unvoted: all_voters,
+            consensused: false,
+        };
+        let _ = vote_status.add_vote(payload_key, voter);
+        vote_status
+    }
+
+    fn add_vote(&mut self, payload_key: &ObservationKey, voter: PeerIndex) -> bool {
+        if &self.payload_key == payload_key {
+            let _ = self.unvoted.remove(voter);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn set_consensused(&mut self, payload_key: &ObservationKey) -> bool {
+        if &self.payload_key == payload_key {
+            self.consensused = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_unresponsive(&self, peer_index: PeerIndex) -> bool {
+        self.consensused && self.unvoted.contains(peer_index)
+    }
+}
+
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused [Block](struct.Block.html)s by applying the PARSEC
 /// algorithm. A `Block`'s payload, described by the [Observation](enum.Observation.html) type, is
@@ -121,6 +166,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     ignore_process_events: bool,
     // Provided RNG: Needs to be cryptographically secure RNG as it is used for DKG key generation.
     secure_rng: ParsecRng,
+    // Including all on-going, consensused and polled blocks
+    vote_statuses: VecDeque<VoteStatus>,
 }
 
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
@@ -265,6 +312,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             ignore_process_events: false,
 
             secure_rng: ParsecRng::new(secure_rng),
+            vote_statuses: Default::default(),
         }
     }
 
@@ -696,6 +744,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }
             });
 
+        if event.is_observation() {
+            self.add_observation_vote(&event);
+        }
+
         let event_index = self.insert_event(event);
 
         let _ = unconsensused_payload_key.map(|payload_key| {
@@ -713,6 +765,75 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         Ok(event_index)
+    }
+
+    fn add_observation_vote(&mut self, event: &Event<S::PublicId>) {
+        let voter = event.creator();
+        if let Some(payload_key) = event.payload_key() {
+            if payload_key.consensus_mode() == ConsensusMode::Supermajority
+                && !self
+                    .vote_statuses
+                    .iter_mut()
+                    .any(|vote_status| vote_status.add_vote(payload_key, voter))
+            {
+                self.vote_statuses.push_back(VoteStatus::new(
+                    payload_key,
+                    voter,
+                    self.voters().clone(),
+                ));
+            }
+        }
+    }
+
+    fn set_vote_consensused(&mut self, payload_keys: &[ObservationKey]) {
+        for payload_key in payload_keys {
+            let _ = self
+                .vote_statuses
+                .iter_mut()
+                .any(|vote_status| vote_status.set_consensused(payload_key));
+        }
+    }
+
+    // Check whether a peer becomes unresponsive. A node is considered as unresponsive when it has
+    // not involved in certain amount (currently one third of voters, which is adjustable later on)
+    // of expected votes among a range of consensused results. When such unresponsive peer is
+    // detected, casting a vote against it.
+    fn check_vote_status(&mut self) {
+        let threshold = std::cmp::min(
+            self.peer_list.voters().count() / UNRESPONSIVE_THRESHOLD_FRACTION,
+            self.vote_statuses.len() / UNRESPONSIVE_THRESHOLD_FRACTION,
+        );
+
+        // Only keep certain consensused voting status and the unconsensused ones among them.
+        let mut consensused = self
+            .vote_statuses
+            .iter()
+            .filter(|vote_status| vote_status.consensused)
+            .count();
+        while consensused > UNRESPONSIVE_FACTOR * threshold {
+            if let Some(vote_status) = self.vote_statuses.pop_front() {
+                if vote_status.consensused {
+                    consensused -= 1;
+                }
+            }
+        }
+
+        let peers_info: Vec<_> = self
+            .peer_list
+            .voters()
+            .map(|(peer_index, peer)| (peer_index, peer.id().clone()))
+            .collect();
+        for (peer_index, peer_id) in peers_info.iter() {
+            if self
+                .vote_statuses
+                .iter()
+                .filter(|vote_status| vote_status.is_unresponsive(*peer_index))
+                .count()
+                > threshold
+            {
+                let _ = self.vote_for(Observation::Left(peer_id.clone()));
+            }
+        }
     }
 
     // Create initial event for this node and insert it into the graph. This must be called when
@@ -759,6 +880,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if payload_keys.is_empty() {
             return Ok(PostProcessAction::Continue);
         }
+
+        self.set_vote_consensused(&payload_keys);
 
         self.output_consensus_info(&payload_keys);
 
@@ -838,6 +961,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             Some(Observation::Add { ref peer_id, .. }) => self.handle_add_peer(peer_id).into(),
             Some(Observation::Remove { ref peer_id, .. }) => {
                 self.handle_remove_peer(event_index, peer_id)
+            }
+            Some(Observation::Left(ref offender)) => {
+                // TODO: Leave to the routing layer deciding what action shall be undertaken.
+                info!(
+                    "{:?} consider {:?} left due to consensus on votes of Left",
+                    self.our_pub_id(),
+                    offender,
+                );
+                None
             }
             Some(Observation::Accusation {
                 ref offender,
@@ -1570,6 +1702,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         let _ = self.add_event(event)?;
+
+        self.check_vote_status();
+
         Ok(())
     }
 

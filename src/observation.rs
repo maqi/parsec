@@ -78,6 +78,8 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
     /// Vote for the next message (Part or Ack) to be handled for the Distributed Key Generation
     /// algorithm used by our common coin.
     DkgMessage(DkgMessage),
+    /// Vote to remove the indicated peer from the network, due to unresponsive.
+    Left(P),
 }
 
 impl<T: NetworkEvent, P: PublicId> Observation<T, P> {
@@ -121,6 +123,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for Observation<T, P> {
             Observation::Genesis { group, .. } => write!(formatter, "Genesis({:?})", group),
             Observation::Add { peer_id, .. } => write!(formatter, "Add({:?})", peer_id),
             Observation::Remove { peer_id, .. } => write!(formatter, "Remove({:?})", peer_id),
+            Observation::Left(offender) => write!(formatter, "Left({:?})", offender),
             Observation::Accusation { offender, malice } => {
                 write!(formatter, "Accusation {{ {:?}, {:?} }}", offender, malice)
             }

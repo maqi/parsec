@@ -364,8 +364,13 @@ impl Network {
         &self,
         expected_peers: &BTreeMap<PeerId, PeerStatus>,
         min_expected_observations: usize,
-        max_expected_observations: usize,
+        mut max_expected_observations: usize,
     ) -> Result<(), ConsensusError> {
+        // Failed peers may incur extra observations due to the unresponsive node handling.
+        max_expected_observations += expected_peers
+            .values()
+            .filter(|peer_status| peer_status == &&PeerStatus::Failed)
+            .count();
         // Check the number of consensused blocks.
         let (got_min, got_max) = unwrap!(self
             .running_non_malicious_peers()

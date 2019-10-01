@@ -379,6 +379,13 @@ impl<P: PublicId> Event<P> {
         }
     }
 
+    pub fn is_observation(&self) -> bool {
+        match self.content.cause {
+            Cause::Observation { .. } => true,
+            _ => false,
+        }
+    }
+
     #[cfg(any(
         feature = "testing",
         feature = "malice-detection",

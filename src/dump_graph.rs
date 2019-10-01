@@ -1023,6 +1023,7 @@ mod detail {
                 Observation::Remove { peer_id, .. } => {
                     format!("Remove({:?})", sanitise_peer_id(peer_id))
                 }
+                Observation::Left(peer_id) => format!("Left({:?})", sanitise_peer_id(peer_id)),
                 Observation::Accusation { offender, malice } => format!(
                     "Accusation {{ {:?}, {} }}",
                     sanitise_peer_id(offender),
