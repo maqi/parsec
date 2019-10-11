@@ -85,6 +85,10 @@ impl VoteStatus {
         }
     }
 
+    fn remove_voter(&mut self, voter: PeerIndex) {
+        let _ = self.unvoted.remove(voter);
+    }
+
     fn set_consensused(&mut self, payload_key: &ObservationKey) -> bool {
         if &self.payload_key == payload_key {
             self.consensused = true;
@@ -335,6 +339,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         if self.have_voted_for(&observation) {
             return Err(Error::DuplicateVote);
+        }
+
+        // To avoid unnecessary Left vote for a removed peer.
+        if let Observation::Remove { ref peer_id, .. } = observation {
+            if let Some(peer_index) = self.peer_list.get_index(peer_id) {
+                self.vote_statuses
+                    .iter_mut()
+                    .for_each(|vote_status| vote_status.remove_voter(peer_index));
+            }
         }
 
         self.flush_pending_events()?;
