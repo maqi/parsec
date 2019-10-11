@@ -282,6 +282,8 @@ pub struct ScheduleOptions {
     pub genesis_restrict_consensus_to: Option<BTreeSet<PeerId>>,
     /// Allows for voting for the same OpaquePayload. This applies only when `ConsensusMode::Single`
     pub vote_for_same: bool,
+    /// Extra votes for the Left
+    pub observation_left: usize,
 }
 
 impl ScheduleOptions {
@@ -340,6 +342,7 @@ impl Default for ScheduleOptions {
             intermediate_consistency_checks: true,
             genesis_restrict_consensus_to: None,
             vote_for_same: false,
+            observation_left: 0,
         }
     }
 }
@@ -586,6 +589,7 @@ impl Schedule {
         // the +1 below is to account for genesis
         let max_observations = obs_schedule.count_observations() * observation_multiplier
             + obs_schedule.count_expected_accusations()
+            + options.observation_left
             + 1;
 
         let mut peers = PeerStatuses::new(&obs_schedule.genesis.all_ids());

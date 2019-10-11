@@ -199,6 +199,70 @@ fn faulty_nodes_terminate_at_random_points() {
     assert!(result.is_ok(), "{:?}", result);
 }
 
+fn faulty_peers_considered_as_left(
+    num_peers: usize,
+    num_faulty: usize,
+    min_fail_step: usize,
+    max_fail_step: usize,
+) {
+    let num_observations = 10;
+    let mut env = Environment::new(SEED);
+
+    let mut failures = BTreeMap::new();
+    let _ = failures.insert(env.rng.gen_range(min_fail_step, max_fail_step), num_faulty);
+    let options = ScheduleOptions {
+        genesis_size: num_peers,
+        opaque_to_add: num_observations,
+        deterministic_failures: failures,
+        observation_left: num_faulty,
+        ..Default::default()
+    };
+    let schedule = Schedule::new(&mut env, &options);
+
+    let result = env.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+
+    let responsive_nodes = num_peers - num_faulty;
+    assert_eq!(
+        env.network.running_non_malicious_peers().count(),
+        responsive_nodes
+    );
+
+    // Faulty nodes should have been detected as unresponsive
+    let faulty_nodes: BTreeSet<_> = env
+        .network
+        .running_non_malicious_peers()
+        .flat_map(|peer| peer.blocks().map(move |block| block))
+        .filter_map(|block| match block.payload() {
+            Observation::Left(offender) => Some(offender.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        faulty_nodes.len() == num_faulty,
+        "detected faulty nodes {:?}",
+        faulty_nodes
+    );
+}
+
+#[test]
+fn faulty_node_always_unresponsive() {
+    let num_peers = 10;
+    faulty_peers_considered_as_left(num_peers, 1, 1, 2);
+}
+
+#[test]
+fn faulty_node_unresponsive_at_random_point() {
+    let num_peers = 10;
+    faulty_peers_considered_as_left(num_peers, 1, 10, 50);
+}
+
+#[test]
+fn faulty_third_unresponsive_concurrently() {
+    let num_peers = 10;
+    faulty_peers_considered_as_left(num_peers, (num_peers - 1) / 3, 10, 50);
+}
+
 #[test]
 fn random_schedule_no_delays() {
     let num_observations = 10;
